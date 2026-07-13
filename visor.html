@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Visor DAMS — Entregables Geoespaciales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+<script src="https://unpkg.com/geotiff@3.0.5/dist-browser/geotiff.js"></script>
+<script src="https://unpkg.com/dxf-parser@1.1.2/dist/dxf-parser.js"></script>
+<script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  /* ── Sistema de marca DAMS ──────────────────────────
+     Oficial: amarillo #F3C323 (acentos), blanco, negro.
+     Funcional: ink #1A1A1A, muted #555, line #D9D9D9,
+     bg-soft #F7F7F5, navy #1F3A5F (headings).
+     Tipografía: Montserrat Light/Regular/Bold.        */
+  :root{
+    --dams-yellow:#F3C323;
+    --dams-yellow-dark:#C99B0F;
+    --dams-yellow-soft:#FFF4D1;
+    --dams-black:#000000;
+    --dams-white:#FFFFFF;
+    --dams-ink:#1A1A1A;
+    --dams-muted:#555555;
+    --dams-line:#D9D9D9;
+    --dams-bg-soft:#F7F7F5;
+    --dams-navy:#1F3A5F;
+    --dams-navy-soft:#D5E8F0;
+    --dams-success:#2E7D5C;
+    --dams-warning-bg:#FFF8E5;
+    --dams-warning-bd:#E0A030;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:'Montserrat','Helvetica','Arial',sans-serif;background:var(--dams-white);overflow:hidden;color:var(--dams-ink)}
+
+  /* ── Header (membrete) ─────────────────── */
+  header{
+    position:fixed;top:0;left:0;right:0;height:54px;z-index:30;
+    background:var(--dams-black);border-bottom:3px solid var(--dams-yellow);
+    display:flex;align-items:center;gap:14px;padding:0 18px;color:var(--dams-white);
+  }
+  .logo{font-weight:800;font-size:20px;letter-spacing:.18em;color:var(--dams-white);white-space:nowrap}
+  .logo .visor{display:block;font-size:8.5px;font-weight:600;letter-spacing:.30em;color:var(--dams-yellow);margin-top:-2px}
+  #proyectoInfo{font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.95;border-left:1px solid #3a3a3a;padding-left:14px}
+  #proyectoInfo b{font-weight:700;color:var(--dams-yellow)}
+  header .spacer{flex:1}
+  .hbtn{
+    background:transparent;border:1px solid #4a4a4a;color:var(--dams-white);
+    font-family:inherit;font-size:11px;font-weight:600;letter-spacing:.05em;
+    padding:7px 13px;border-radius:3px;cursor:pointer;white-space:nowrap;
+  }
+  .hbtn:hover{border-color:var(--dams-yellow);color:var(--dams-yellow)}
+  .hbtn.activo{background:var(--dams-yellow);border-color:var(--dams-yellow);color:var(--dams-black)}
+
+  /* ── Mapa(s) ────────────────────────────── */
+  #mapWrap{position:fixed;top:54px;left:0;right:0;bottom:30px}
+  #map,#mapB{position:absolute;inset:0}
+  #mapB{display:none}
+  #divisor{display:none;position:absolute;top:0;bottom:0;width:4px;background:var(--dams-yellow);z-index:20;cursor:ew-resize;left:50%}
+  #divisor::after{
+    content:'◂ ▸';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:var(--dams-yellow);color:var(--dams-black);font-size:11px;font-weight:700;
+    padding:6px 7px;border-radius:20px;white-space:nowrap;
+  }
+  .etiquetaCmp{
+    display:none;position:absolute;top:12px;z-index:19;background:var(--dams-white);
+    color:var(--dams-ink);font-size:11px;font-weight:600;padding:6px 11px;border-radius:3px;
+    border-left:3px solid var(--dams-yellow);max-width:38%;box-shadow:0 1px 6px rgba(0,0,0,.18);
+  }
+  #cmpIzq{left:12px} #cmpDer{right:12px}
+
+  /* ── Panel de capas ─────────────────────── */
+  #panel{
+    position:absolute;top:12px;left:12px;z-index:21;width:296px;max-height:calc(100% - 60px);
+    background:var(--dams-white);border-radius:6px;color:var(--dams-ink);
+    display:flex;flex-direction:column;box-shadow:0 2px 14px rgba(0,0,0,.22);
+    border-top:3px solid var(--dams-yellow);
+  }
+  #panel h2{
+    font-size:11px;font-weight:700;letter-spacing:.12em;padding:12px 14px 6px;
+    color:var(--dams-navy);display:flex;justify-content:space-between;align-items:center;cursor:pointer;
+  }
+  #panel h2 .flecha{transition:transform .2s;color:var(--dams-muted)}
+  #panel.cerrado .flecha{transform:rotate(-90deg)}
+  #panel.cerrado #panelBody{display:none}
+  #panelBody{overflow-y:auto}
+  #estado{font-size:10.5px;color:var(--dams-muted);padding:0 14px 8px;min-height:0}
+  #sitios{display:flex;gap:6px;padding:0 10px 8px;flex-wrap:wrap}
+  #sitios:empty{display:none}
+  .sitioBtn{
+    flex:1;min-width:110px;padding:7px 8px;border-radius:4px;cursor:pointer;
+    border:1px solid var(--dams-line);background:var(--dams-bg-soft);
+    font-family:inherit;font-size:11px;font-weight:700;color:var(--dams-navy);
+  }
+  .sitioBtn:hover{border-color:var(--dams-yellow-dark)}
+  .sitioBtn.activo{background:var(--dams-yellow);border-color:var(--dams-yellow);color:var(--dams-black)}
+  #capasBody{padding:0 10px}
+  .capa{background:var(--dams-bg-soft);border:1px solid var(--dams-line);border-radius:4px;padding:8px 10px;margin-bottom:6px}
+  .capa .fila1{display:flex;align-items:center;gap:8px}
+  .capa input[type=checkbox]{accent-color:var(--dams-navy);width:15px;height:15px;cursor:pointer;flex-shrink:0}
+  .capa .nombre{font-size:12px;font-weight:600;flex:1;line-height:1.25;word-break:break-word}
+  .capa .fecha{font-size:9px;font-weight:700;background:var(--dams-yellow);color:var(--dams-black);padding:2px 6px;border-radius:2px;white-space:nowrap}
+  .capa .tipo{font-size:9px;color:var(--dams-muted);letter-spacing:.06em;text-transform:uppercase;margin:2px 0 0 23px}
+  .capa input[type=range]{width:100%;margin-top:6px;accent-color:var(--dams-yellow-dark);height:4px;cursor:pointer}
+  .capa .quitar{background:none;border:none;color:#B3452F;font-size:13px;cursor:pointer;padding:0 2px;flex-shrink:0}
+  .capa.cargando{opacity:.6}
+  .capa .prog{font-size:9.5px;color:var(--dams-navy);margin:3px 0 0 23px;font-weight:600}
+  .capa.error{border-left:3px solid var(--dams-warning-bd);background:var(--dams-warning-bg)}
+  .capa .errtxt{font-size:9.5px;color:#8a5a00;margin:3px 0 0 23px;line-height:1.35}
+
+  #archivosBody{padding:0 10px 4px}
+  .archivo{display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:11px;border-bottom:1px solid var(--dams-bg-soft)}
+  .archivo a{color:var(--dams-navy);text-decoration:none;font-weight:600;flex:1;word-break:break-all}
+  .archivo a:hover{color:var(--dams-yellow-dark)}
+  .archivo .peso{font-size:9.5px;color:var(--dams-muted);white-space:nowrap}
+  h3.seccion{font-size:10px;font-weight:700;letter-spacing:.1em;color:var(--dams-muted);padding:8px 14px 5px;text-transform:uppercase}
+
+  #btnSubir{
+    margin:8px 10px 12px;padding:8px;border:1px dashed var(--dams-line);border-radius:4px;
+    background:transparent;color:var(--dams-navy);font-family:inherit;font-size:11px;font-weight:600;
+    cursor:pointer;letter-spacing:.02em;
+  }
+  #btnSubir:hover{border-color:var(--dams-yellow-dark);color:var(--dams-yellow-dark)}
+
+  #cmpConfig{display:none;padding:0 14px 12px;font-size:11px}
+  #cmpConfig label{display:block;margin:6px 0 3px;font-weight:600;color:var(--dams-muted)}
+  #cmpConfig select{width:100%;padding:6px;border-radius:3px;border:1px solid var(--dams-line);background:var(--dams-white);color:var(--dams-ink);font-family:inherit;font-size:11px}
+
+  /* ── Barra inferior institucional ───────── */
+  footer{
+    position:fixed;left:0;right:0;bottom:0;height:30px;z-index:30;
+    background:var(--dams-white);color:var(--dams-muted);font-size:10.5px;
+    display:flex;align-items:center;gap:16px;padding:0 14px;
+    font-variant-numeric:tabular-nums;border-top:1px solid var(--dams-line);
+  }
+  footer .sep{opacity:.35}
+  #coordsPosgar{color:var(--dams-navy);font-weight:700}
+  footer .marca{font-weight:600;color:var(--dams-ink)}
+  footer .marca i{font-style:normal;color:var(--dams-yellow-dark)}
+
+  /* ── Landing ────────────────────────────── */
+  #landing{position:fixed;inset:0;z-index:100;background:var(--dams-white);display:flex;align-items:center;justify-content:center;overflow:auto}
+  #landing .caja{width:min(420px,92vw);text-align:center;padding:28px 20px}
+  #landing .marca{font-size:44px;font-weight:800;letter-spacing:.20em;color:var(--dams-black);line-height:1}
+  #landing .rule{width:64px;height:5px;background:var(--dams-yellow);margin:12px auto 0}
+  #landing .pos{font-size:11px;font-weight:600;letter-spacing:.14em;color:var(--dams-navy);margin-top:14px;text-transform:uppercase}
+  #landing .slogan{font-size:12.5px;font-weight:300;color:var(--dams-muted);margin-top:4px}
+  #landing p{font-size:13px;color:var(--dams-muted);margin:26px 0 14px;line-height:1.55;font-weight:400}
+  #landing input{
+    width:100%;padding:12px;border-radius:4px;border:1px solid var(--dams-line);
+    background:var(--dams-bg-soft);color:var(--dams-ink);font-family:inherit;font-size:15px;
+    text-align:center;letter-spacing:.1em;
+  }
+  #landing input:focus{outline:2px solid var(--dams-yellow);border-color:transparent}
+  #landing button{
+    width:100%;margin-top:12px;padding:12px;border-radius:4px;border:none;cursor:pointer;
+    background:var(--dams-black);color:var(--dams-white);font-family:inherit;font-size:13px;font-weight:700;letter-spacing:.10em;
+  }
+  #landing button:hover{background:var(--dams-navy)}
+  #landingError{color:#B3452F;font-size:12px;margin-top:12px;min-height:16px;font-weight:600}
+  #landing .demoLink{margin-top:20px;font-size:12px}
+  #landing .demoLink a{color:var(--dams-navy);font-weight:600}
+  .creds{display:flex;gap:10px;margin-top:30px}
+  .cred{flex:1;border:1px solid var(--dams-line);border-top:3px solid var(--dams-yellow);border-radius:4px;padding:10px 8px}
+  .cred b{display:block;font-size:11px;color:var(--dams-navy);letter-spacing:.02em}
+  .cred span{display:block;font-size:9.5px;color:var(--dams-muted);margin-top:3px;line-height:1.35}
+  #landing .legal{font-size:9px;color:var(--dams-muted);margin-top:26px;line-height:1.6}
+
+  /* dropzone + avisos */
+  #dropHint{position:absolute;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(243,195,35,.22);border:4px dashed var(--dams-yellow);pointer-events:none}
+  #dropHint span{background:var(--dams-black);color:var(--dams-yellow);font-weight:700;padding:14px 26px;border-radius:6px;font-size:15px}
+  #aviso{
+    position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:40;display:none;
+    background:var(--dams-white);color:var(--dams-ink);font-size:12px;font-weight:600;
+    padding:10px 18px;border-radius:4px;border-left:3px solid var(--dams-warning-bd);
+    box-shadow:0 2px 12px rgba(0,0,0,.22);max-width:80%;
+  }
+
+  .maplibregl-popup-content{font-family:'Montserrat',sans-serif;font-size:12px;color:var(--dams-ink);border-radius:4px;border-top:3px solid var(--dams-yellow)}
+  .maplibregl-popup-content b{color:var(--dams-navy)}
+  .maplibregl-ctrl-attrib{font-size:10px}
+
+  @media (max-width:640px){
+    #panel{width:calc(100vw - 24px)}
+    #proyectoInfo{display:none}
+    footer .marca{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DAMS<span class="visor">VISOR DE ENTREGABLES</span></div>
+  <div id="proyectoInfo"></div>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnBase">Base: Satélite</button>
+  <button class="hbtn" id="btn3d">3D</button>
+  <button class="hbtn" id="btnCmp">⇔ Comparar</button>
+</header>
+
+<div id="mapWrap">
+  <div id="map"></div>
+  <div id="mapB"></div>
+  <div id="divisor"></div>
+  <div class="etiquetaCmp" id="cmpIzq"></div>
+  <div class="etiquetaCmp" id="cmpDer"></div>
+
+  <div id="panel">
+    <h2 onclick="document.getElementById('panel').classList.toggle('cerrado')">CAPAS DEL PROYECTO <span class="flecha">▾</span></h2>
+    <div id="panelBody">
+      <div id="sitios"></div>
+      <div id="estado"></div>
+      <div id="capasBody"></div>
+      <div id="archivosWrap" style="display:none">
+        <h3 class="seccion">Archivos para descarga</h3>
+        <div id="archivosBody"></div>
+      </div>
+      <div id="cmpConfig">
+        <label>Izquierda</label><select id="selIzq"></select>
+        <label>Derecha</label><select id="selDer"></select>
+      </div>
+      <button id="btnSubir">＋ Superponer archivo (DXF · GeoJSON · KML · KMZ)</button>
+      <input type="file" id="fileInput" accept=".dxf,.geojson,.json,.kml,.kmz,.gpx" style="display:none" multiple>
+    </div>
+  </div>
+
+  <div id="dropHint"><span>Soltá el archivo para superponerlo en el mapa</span></div>
+  <div id="aviso"></div>
+</div>
+
+<footer>
+  <span id="coordsPosgar">—</span>
+  <span class="sep">|</span>
+  <span id="coordsWgs">—</span>
+  <span id="cota"></span>
+  <span style="flex:1"></span>
+  <span class="marca">DAMS SRL · <i>Mejores datos. Mejores resultados.</i></span>
+</footer>
+
+<div id="landing">
+  <div class="caja">
+    <div class="marca">DAMS</div>
+    <div class="rule"></div>
+    <div class="pos">Servicios de Ingeniería y Exploración en la Industria Minera</div>
+    <div class="slogan">Mejores datos. Mejores resultados.</div>
+    <p>Ingresá el código de acceso de tu proyecto para ver ortomosaicos, modelos digitales de terreno y planos, directo desde la nube.</p>
+    <input id="tokenInput" placeholder="código de proyecto" autocomplete="off" spellcheck="false">
+    <button id="tokenBtn">INGRESAR</button>
+    <div id="landingError"></div>
+    <div class="demoLink"><a href="?c=demo">Ver proyecto de demostración →</a></div>
+    <div class="creds">
+      <div class="cred"><b>ISO 9001 / 14001 / 45001</b><span>Sistema de Gestión Integrado certificado bajo Trinorma</span></div>
+      <div class="cred"><b>Empresa B</b><span>Certificada por impacto socio-ambiental positivo</span></div>
+    </div>
+    <div class="legal">DAMS SRL · CUIT 30-71532204-4 · Falucho Oeste 1498, Capital, San Juan (CP 5400)<br>info@dams.com.ar · +54 264 5291833</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   VISOR DAMS — visor de entregables geoespaciales
+   Lee los datos DIRECTO desde Google Drive (API v3 + clave):
+   los archivos del cliente se comparten "cualquiera con el
+   enlace" y el visor los levanta sin pipeline previo.
+   Tipos de capa: geotiff | geotiff-dem | geojson | kml | kmz |
+                  dxf | xyz | dem(tiles) | imagen
+   ============================================================ */
+
+// ---------- Proyecciones ----------
+const FAJAS = {};
+for (let f = 1; f <= 7; f++) {
+  const epsg = 5342 + f; // EPSG:5343..5349 = POSGAR 2007 / Argentina 1..7
+  const lon0 = -75 + f * 3;
+  proj4.defs('EPSG:' + epsg,
+    `+proj=tmerc +lat_0=-90 +lon_0=${lon0} +k=1 +x_0=${f * 1000000 + 500000} +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`);
+  FAJAS[epsg] = f;
+}
+// UTM WGS84 bajo demanda (32601-60 N, 32701-60 S) y POSGAR 94 (222xx)
+function asegurarEpsg(code) {
+  code = Number(code);
+  if (!code || code === 32767) return null;                 // user-defined → usar crs del config
+  const k = 'EPSG:' + code;
+  if (proj4.defs(k)) return k;
+  if (code >= 32601 && code <= 32660)
+    proj4.defs(k, `+proj=utm +zone=${code - 32600} +datum=WGS84 +units=m +no_defs`);
+  else if (code >= 32701 && code <= 32760)
+    proj4.defs(k, `+proj=utm +zone=${code - 32700} +south +datum=WGS84 +units=m +no_defs`);
+  else if ((code >= 22171 && code <= 22177) || (code >= 22181 && code <= 22187)) {
+    // POSGAR 98 (2217x) y POSGAR 94 (2218x), fajas 1..7
+    const f = code % 10;
+    proj4.defs(k, `+proj=tmerc +lat_0=-90 +lon_0=${-75 + f * 3} +k=1 +x_0=${f * 1000000 + 500000} +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs`);
+  } else if (code === 4326) {
+    return k;
+  } else return null;
+  return k;
+}
+
+// ---------- Estado global ----------
+let GLOBAL = {};         // data/visor.json (driveApiKey global)
+let CFG = null;          // config.json del cliente
+let map = null, mapB = null;
+let modoCmp = false;
+let base = 'satelite';
+let capasSubidas = [];
+let syncLock = false;
+let terrenoOn = false;
+
+const $ = id => document.getElementById(id);
+const aviso = (msg, ms = 5000) => {
+  const el = $('aviso'); el.textContent = msg; el.style.display = 'block';
+  clearTimeout(el._t); el._t = setTimeout(() => el.style.display = 'none', ms);
+};
+const estado = msg => { $('estado').textContent = msg || ''; };
+
+// ---------- Google Drive ----------
+function driveKey() { return CFG.driveApiKey || GLOBAL.driveApiKey || ''; }
+
+// Cola + reintentos para las descargas de Drive: muchas lecturas simultáneas
+// disparan el rate-limit de Google (403/red sin CORS → "Failed to fetch").
+const _fetchNativo = window.fetch.bind(window);
+let _driveActivos = 0;
+const _driveEspera = [];
+const DRIVE_CONCURRENCIA = 3;
+// Fusible: si Google empieza a rechazar en serie (rate-limit "Sorry"), cortamos
+// los reintentos 5 minutos — insistir solo prolonga el bloqueo.
+let _driveFallas = 0, _driveCorteHasta = 0;
+async function _fetchDrive(url, opts) {
+  if (Date.now() < _driveCorteHasta)
+    throw new Error('Drive está limitando las descargas — reintentá en unos minutos');
+  if (_driveActivos >= DRIVE_CONCURRENCIA) await new Promise(r => _driveEspera.push(r));
+  _driveActivos++;
+  try {
+    let ultimoErr;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await _fetchNativo(url, opts);
+        if (r.status === 403 || r.status === 429 || r.status >= 500) throw new Error('HTTP ' + r.status);
+        _driveFallas = 0;
+        return r;
+      } catch (e) {
+        ultimoErr = e;
+        if (++_driveFallas >= 8) {
+          _driveCorteHasta = Date.now() + 5 * 60000;
+          aviso('Google Drive está limitando las descargas. El visor reintenta solo en unos minutos.', 9000);
+          break;
+        }
+        if (i < 2) await new Promise(r => setTimeout(r, 800 * Math.pow(2, i) + Math.random() * 400));
+      }
+    }
+    throw ultimoErr;
+  } finally {
+    _driveActivos--;
+    const sig = _driveEspera.shift();
+    if (sig) sig();
+  }
+}
+window.fetch = function (url, opts) {
+  const u = typeof url === 'string' ? url : (url && url.url) || '';
+  if (u.includes('googleapis.com/drive/') && u.includes('alt=media')) return _fetchDrive(u, opts);
+  return _fetchNativo(url, opts);
+};
+
+function driveMediaUrl(id) {
+  return `https://www.googleapis.com/drive/v3/files/${id}?alt=media&supportsAllDrives=true&key=${driveKey()}`;
+}
+
+async function driveListar(folderId) {
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+  const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,size,webViewLink)');
+  let out = [], pageToken = '';
+  do {
+    const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=1000` +
+      `&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${driveKey()}` +
+      (pageToken ? `&pageToken=${pageToken}` : '');
+    const r = await fetch(url);
+    if (!r.ok) {
+      const detalle = r.status === 403 ? 'clave API inválida/restringida o carpeta no compartida por enlace'
+        : r.status === 404 ? 'carpeta no encontrada (¿está compartida "cualquiera con el enlace"?)' : 'HTTP ' + r.status;
+      throw new Error(`Drive: ${detalle}`);
+    }
+    const j = await r.json();
+    out = out.concat(j.files || []);
+    pageToken = j.nextPageToken;
+  } while (pageToken);
+  return out;
+}
+
+// Fecha desde el nombre del archivo: "21-02-23", "17-12-2025" o "20251217"
+function fechaDesdeNombre(n) {
+  let m = /(\d{2})-(\d{2})-(\d{4})(?!\d)/.exec(n);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  m = /(\d{2})-(\d{2})-(\d{2})(?!\d)/.exec(n);
+  if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
+  m = /(?:^|\D)(20\d{2})(\d{2})(\d{2})(?!\d)/.exec(n);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  return null;
+}
+
+const MAX_VECTOR_MB = 30; // KML/KMZ/DXF más grandes van a descargas
+
+// Mapea un archivo de Drive a una capa del visor (o null → lista de descargas)
+function capaDesdeArchivo(f, fecha, grupo) {
+  const n = f.name.toLowerCase();
+  const tam = Number(f.size || 0);
+  const base = {
+    id: 'd' + f.id.slice(0, 12), nombre: f.name.replace(/\.[^.]+$/, ''),
+    driveId: f.id, fecha: fechaDesdeNombre(f.name) || fecha, tamano: tam, grupo
+  };
+  if (/\.(tif|tiff)$/.test(n))
+    return { ...base, tipo: /dsm|dtm|mdt|mde|dem|eleva|surface|superficie/.test(n) ? 'geotiff-dem' : 'geotiff', visible: false };
+  if (tam > MAX_VECTOR_MB * 1048576) return null;
+  if (/\.geojson$/.test(n)) return { ...base, tipo: 'geojson', visible: true };
+  if (/\.kml$/.test(n)) return { ...base, tipo: 'kml', visible: true };
+  if (/\.kmz$/.test(n)) return { ...base, tipo: 'kmz', visible: true };
+  if (/\.dxf$/.test(n)) return { ...base, tipo: 'dxf', visible: false };
+  return null; // no visualizable → descargas
+}
+
+async function descubrirDrive() {
+  const carpetas = CFG.carpetasDrive || [];
+  if (!carpetas.length) return;
+  if (!driveKey()) { estado('⚠ Falta driveApiKey en la configuración.'); return; }
+  estado('Leyendo carpeta de Drive…');
+  const descargas = [];
+  for (const c of carpetas) {
+    const id = typeof c === 'string' ? c : c.id;
+    const fecha = typeof c === 'string' ? null : c.fecha;
+    const grupo = (typeof c === 'string' ? null : c.grupo) || id;
+    try {
+      await recorrerCarpeta(id, fecha, descargas, 0, grupo);
+    } catch (e) {
+      estado('⚠ ' + e.message); return;
+    }
+  }
+  activarMasRecientes();
+  renderArchivos(descargas);
+  renderPanel();
+  estado('');
+}
+
+async function recorrerCarpeta(folderId, fecha, descargas, prof, grupo) {
+  const items = await driveListar(folderId);
+  for (const f of items) {
+    if (f.mimeType === 'application/vnd.google-apps.folder') {
+      if (prof < 3 && !/fotos|fotogr[aá]fico|registro|ats|check|reporte|\bjpg\b/i.test(f.name))
+        await recorrerCarpeta(f.id, fecha, descargas, prof + 1, grupo);
+      continue;
+    }
+    const capa = capaDesdeArchivo(f, fecha, grupo);
+    if (capa) {
+      if (!CFG.capas.some(c => c.driveId === capa.driveId)) {
+        CFG.capas.push(capa);
+        for (const m of mapas()) agregarCapa(m, capa, CFG.capas.length);
+      }
+    } else if (/\.(pdf|dwg|ecw|las|laz|zip|docx?|xlsx?|kmz|kml|dxf|geojson)$/i.test(f.name)) {
+      descargas.push(f);
+    }
+  }
+}
+
+// Deja visible solo el ráster más reciente de cada grupo (carpeta) — el resto
+// queda disponible en el panel y en Comparar sin saturar la carga inicial.
+function activarMasRecientes() {
+  const grupos = {};
+  for (const c of CFG.capas) {
+    if (!c.grupo || (c.tipo !== 'geotiff' && c.tipo !== 'geotiff-dem')) continue;
+    (grupos[c.grupo] = grupos[c.grupo] || []).push(c);
+  }
+  for (const g of Object.values(grupos)) {
+    for (const tipo of ['geotiff', 'geotiff-dem']) {
+      const cands = g.filter(c => c.tipo === tipo).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+      if (cands.length && !cands.some(c => c.visible)) {
+        const c = cands[0];
+        c.visible = true;
+        if (tipo === 'geotiff-dem') c.opacidad = c.opacidad ?? 0.6;
+        for (const m of mapas()) setVisibilidad(m, c, true);
+      }
+    }
+  }
+}
+
+function renderArchivos(files) {
+  if (!files.length) return;
+  const cont = $('archivosBody');
+  cont.innerHTML = '';
+  for (const f of files) {
+    const div = document.createElement('div');
+    div.className = 'archivo';
+    const mb = f.size ? (f.size / 1048576).toFixed(f.size > 1073741824 ? 0 : 1) + ' MB' : '';
+    div.innerHTML = `<a href="${f.webViewLink}" target="_blank" rel="noopener">⭳ ${f.name}</a><span class="peso">${mb}</span>`;
+    cont.appendChild(div);
+  }
+  $('archivosWrap').style.display = 'block';
+}
+
+// ---------- Bases ----------
+const BASES = {
+  satelite: { nombre: 'Satélite', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], attribution: 'Esri, Maxar', maxzoom: 19 },
+  topo: { nombre: 'Topográfico', tiles: ['https://a.tile.opentopomap.org/{z}/{x}/{y}.png', 'https://b.tile.opentopomap.org/{z}/{x}/{y}.png'], attribution: '© OSM, SRTM · OpenTopoMap', maxzoom: 17 },
+  osm: { nombre: 'Calles', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], attribution: '© OpenStreetMap', maxzoom: 19 }
+};
+const ORDEN_BASES = ['satelite', 'topo', 'osm'];
+// terreno 3D global (DEM mundial ~30 m) — el MDT del proyecto se ve como capa
+const DEM_GLOBAL = { url: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png', encoding: 'terrarium', maxzoom: 14 };
+
+// ---------- Arranque ----------
+const params = new URLSearchParams(location.search);
+const token = (params.get('c') || '').trim().toLowerCase();
+
+$('tokenBtn').onclick = () => {
+  const t = $('tokenInput').value.trim().toLowerCase();
+  if (t) location.search = '?c=' + encodeURIComponent(t);
+};
+$('tokenInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('tokenBtn').click(); });
+
+if (token) {
+  Promise.all([
+    fetch('data/visor.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    fetch(`data/c/${encodeURIComponent(token)}/config.json`, { cache: 'no-store' })
+      .then(r => { if (!r.ok) throw new Error('404'); return r.json(); })
+  ]).then(([g, cfg]) => { GLOBAL = g; CFG = cfg; CFG.capas = CFG.capas || []; iniciar(); })
+    .catch(() => {
+      $('landingError').textContent = 'Código no válido o proyecto no disponible.';
+      $('tokenInput').value = token;
+    });
+}
+
+// ---------- Estilo base ----------
+function estiloBase() {
+  const sources = {}, layers = [{ id: 'fondo', type: 'background', paint: { 'background-color': '#E9E6E0' } }];
+  for (const k of ORDEN_BASES) {
+    sources['base-' + k] = { type: 'raster', tiles: BASES[k].tiles, tileSize: 256, attribution: BASES[k].attribution, maxzoom: BASES[k].maxzoom };
+    layers.push({ id: 'base-' + k, type: 'raster', source: 'base-' + k, layout: { visibility: k === base ? 'visible' : 'none' } });
+  }
+  sources['dem-global'] = { type: 'raster-dem', tiles: [DEM_GLOBAL.url], tileSize: 256, encoding: DEM_GLOBAL.encoding, maxzoom: DEM_GLOBAL.maxzoom };
+  return { version: 8, glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf', sources, layers };
+}
+
+function resolverUrl(u) {
+  if (!u || /^(https?:)?\/\//.test(u) || u.startsWith('/') || u.startsWith('data:') || u.startsWith('blob:')) return u;
+  return `data/c/${encodeURIComponent(token)}/${u}`;
+}
+function urlDeCapa(capa) { return capa.driveId ? driveMediaUrl(capa.driveId) : resolverUrl(capa.url); }
+
+// ---------- Alta de capas ----------
+function paletaCad(i) {
+  const c = ['#F3C323', '#1F3A5F', '#B3452F', '#2E7D5C', '#7B5EA7', '#C97B12', '#3E7CA8'];
+  return c[i % c.length];
+}
+
+function primerVectorId(m) {
+  const ls = m.getStyle().layers;
+  for (const l of ls) if (/^c-.*(-fill)?$/.test(l.id) && (l.type === 'line' || l.type === 'fill' || l.type === 'circle' || l.type === 'symbol')) return l.id;
+  return undefined;
+}
+
+function agregarCapa(m, capa, idx) {
+  const id = 'c-' + capa.id;
+  const visible = capa.visible === false ? 'none' : 'visible';
+
+  if (capa.tipo === 'xyz') {
+    m.addSource(id, {
+      type: 'raster', tiles: [urlDeCapa(capa)], tileSize: capa.tileSize || 256,
+      minzoom: capa.minzoom || 0, maxzoom: capa.maxzoom || 22,
+      ...(capa.bounds ? { bounds: capa.bounds } : {}), attribution: capa.attribution || 'DAMS SRL'
+    });
+    m.addLayer({ id, type: 'raster', source: id, layout: { visibility: visible }, paint: { 'raster-opacity': capa.opacidad ?? 1 } }, primerVectorId(m));
+
+  } else if (capa.tipo === 'dem') {           // teselas raster-dem (opcional)
+    m.addSource(id, { type: 'raster-dem', tiles: [urlDeCapa(capa)], tileSize: capa.tileSize || 256, encoding: capa.encoding || 'terrarium', maxzoom: capa.maxzoom || 15 });
+    m.addLayer({ id, type: 'hillshade', source: id, layout: { visibility: visible }, paint: { 'hillshade-exaggeration': capa.opacidad ?? 0.55 } }, primerVectorId(m));
+
+  } else if (capa.tipo === 'imagen') {
+    m.addSource(id, { type: 'image', url: urlDeCapa(capa), coordinates: capa.coordenadas });
+    m.addLayer({ id, type: 'raster', source: id, layout: { visibility: visible }, paint: { 'raster-opacity': capa.opacidad ?? 1 } }, primerVectorId(m));
+
+  } else if (capa.tipo === 'geotiff' || capa.tipo === 'geotiff-dem') {
+    instalarGeotiff(m, capa);                 // asíncrono
+
+  } else if (capa.tipo === 'geojson' || capa.tipo === 'kml' || capa.tipo === 'kmz' || capa.tipo === 'dxf') {
+    instalarVector(m, capa, idx);             // asíncrono si viene de Drive
+  }
+}
+
+// ---------- Vectores (GeoJSON directo o KML/KMZ/DXF convertidos) ----------
+async function obtenerGeojson(capa) {
+  if (capa.data) return capa.data;
+  if (capa._gj) return capa._gj;
+  const url = urlDeCapa(capa);
+  if (capa.tipo === 'geojson') {
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    capa._gj = await r.json();
+  } else if (capa.tipo === 'kml') {
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    capa._gj = toGeoJSON.kml(new DOMParser().parseFromString(await r.text(), 'text/xml'));
+  } else if (capa.tipo === 'kmz') {
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    const zip = await JSZip.loadAsync(await r.arrayBuffer());
+    const kml = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.kml'));
+    if (!kml) throw new Error('KMZ sin KML interno');
+    capa._gj = toGeoJSON.kml(new DOMParser().parseFromString(await zip.files[kml].async('text'), 'text/xml'));
+  } else if (capa.tipo === 'dxf') {
+    const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+    capa._gj = dxfAGeojson(await r.text());
+  }
+  return capa._gj;
+}
+
+async function instalarVector(m, capa, idx) {
+  const id = 'c-' + capa.id;
+  capa._estado = capa._gj ? '' : 'cargando';
+  renderPanel();
+  let gj;
+  try { gj = await obtenerGeojson(capa); }
+  catch (e) { capa._estado = 'error'; capa._err = e.message; renderPanel(); return; }
+  capa._estado = '';
+  if (m._removed || m.getSource(id)) { renderPanel(); return; }
+  const color = capa.color || paletaCad(idx || 0);
+  const visible = capa.visible === false ? 'none' : 'visible';
+  m.addSource(id, { type: 'geojson', data: gj });
+  m.addLayer({
+    id: id + '-fill', type: 'fill', source: id,
+    filter: ['any', ['==', ['geometry-type'], 'Polygon'], ['==', ['geometry-type'], 'MultiPolygon']],
+    layout: { visibility: visible }, paint: { 'fill-color': color, 'fill-opacity': 0.13 }
+  });
+  m.addLayer({
+    id, type: 'line', source: id,
+    layout: { visibility: visible, 'line-join': 'round', 'line-cap': 'round' },
+    paint: { 'line-color': color, 'line-width': capa.grosor || 1.8, 'line-opacity': capa.opacidad ?? 1 }
+  });
+  m.addLayer({
+    id: id + '-pt', type: 'circle', source: id, filter: ['==', ['geometry-type'], 'Point'],
+    layout: { visibility: visible },
+    paint: { 'circle-radius': 5, 'circle-color': color, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#FFFFFF' }
+  });
+  m.addLayer({
+    id: id + '-lbl', type: 'symbol', source: id, filter: ['has', 'nombre'],
+    layout: { visibility: visible, 'text-field': ['get', 'nombre'], 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top', 'text-font': ['Open Sans Semibold'] },
+    paint: { 'text-color': '#1A1A1A', 'text-halo-color': '#FFFFFF', 'text-halo-width': 1.5 }
+  });
+  renderPanel();
+}
+
+// ---------- GeoTIFF directo (Drive o URL) ----------
+const MAX_PX_LADO = 2048;           // lado máx. del render
+const MAX_BYTES_LECTURA = 96 * 1048576; // tope de IO por lectura (sin pirámides)
+
+async function abrirTiff(capa) {
+  if (capa._tiffProm) return capa._tiffProm;
+  capa._tiffProm = (async () => {
+    const tiff = await GeoTIFF.fromUrl(urlDeCapa(capa), {
+      allowFullFile: (capa.tamano || 0) < 32 * 1048576,
+      blockSize: 1048576,   // bloques de 1 MB → muchas menos peticiones a Drive
+      cacheSize: 200
+    });
+    const count = await tiff.getImageCount();
+    const niveles = [];
+    for (let i = 0; i < count; i++) niveles.push(await tiff.getImage(i));
+    const base = niveles[0];
+    const gk = await base.getGeoKeys();
+    let epsg = asegurarEpsg(gk.ProjectedCSTypeGeoKey || gk.GeographicTypeGeoKey);
+    if (!epsg) epsg = 'EPSG:' + (capa.crs || CFG.crs || 4326);
+    const bbox = base.getBoundingBox(); // [minX, minY, maxX, maxY] en CRS nativo
+    let nodata = null;
+    try { nodata = base.getGDALNoData(); } catch (_) {}
+    return { niveles, base, epsg, bbox, nodata, W: base.getWidth(), H: base.getHeight(), samples: base.getSamplesPerPixel() };
+  })();
+  return capa._tiffProm;
+}
+
+function esquinas4326(bb, epsg) { // [TL, TR, BR, BL] para image source
+  const t = p => epsg === 'EPSG:4326' ? p : proj4(epsg, 'EPSG:4326', p);
+  return [t([bb[0], bb[3]]), t([bb[2], bb[3]]), t([bb[2], bb[1]]), t([bb[0], bb[1]])];
+}
+
+async function instalarGeotiff(m, capa) {
+  const id = 'c-' + capa.id;
+  // perezoso: los TIFF apagados no se abren hasta que el usuario los tilda
+  // (evita abrir 10+ archivos de Drive a la vez y pisar el rate-limit)
+  if (capa.visible === false) { renderPanel(); return; }
+  const hk = m === map ? '_hA' : '_hB';
+  capa._estado = 'cargando'; capa._prog = 'leyendo encabezado…';
+  renderPanel();
+  let info;
+  try { info = await abrirTiff(capa); }
+  catch (e) {
+    capa._tiffProm = null; // permitir reintento al re-tildar
+    capa._estado = 'error';
+    capa._err = /403|401/.test(e.message) ? 'Sin acceso en Drive: compartir "cualquiera con el enlace" y revisar la clave API.' : e.message;
+    renderPanel(); return;
+  }
+  if (m._removed) return;
+  capa._epsg = info.epsg;
+  // primera pintura: extensión completa al nivel más liviano
+  try { await actualizarGeotiff(m, capa, true); }
+  catch (e) { capa._estado = 'error'; capa._err = e.message; renderPanel(); return; }
+  if (capa._estado !== 'error') capa._estado = '';
+  renderPanel();
+  // refinar al navegar (una sola vez por mapa)
+  if (!capa[hk]) {
+    capa[hk] = true;
+    const h = () => { actualizarGeotiff(m, capa, false).catch(() => {}); };
+    m.on('moveend', h);
+  }
+  // encuadre inicial si el proyecto no define centro/sitios/bounds
+  if (!CFG.bounds && !CFG.centro && !CFG.sitios && !CFG._encuadrado && m === map) {
+    CFG._encuadrado = true;
+    const c = esquinas4326(info.bbox, info.epsg);
+    map.fitBounds([[Math.min(c[0][0], c[3][0]), Math.min(c[2][1], c[3][1])], [Math.max(c[1][0], c[2][0]), Math.max(c[0][1], c[1][1])]], { padding: 40, duration: 0 });
+  }
+}
+
+async function actualizarGeotiff(m, capa, inicial) {
+  const info = await abrirTiff(capa);
+  const id = 'c-' + capa.id;
+  if (capa.visible === false && !inicial) return;
+
+  // ventana pedida (en CRS nativo)
+  let win = info.bbox;
+  if (!inicial) {
+    const b = m.getBounds();
+    const t = p => info.epsg === 'EPSG:4326' ? p : proj4('EPSG:4326', info.epsg, p);
+    const cs = [t([b.getWest(), b.getSouth()]), t([b.getEast(), b.getSouth()]), t([b.getEast(), b.getNorth()]), t([b.getWest(), b.getNorth()])];
+    const vx = cs.map(c => c[0]), vy = cs.map(c => c[1]);
+    win = [Math.max(info.bbox[0], Math.min(...vx)), Math.max(info.bbox[1], Math.min(...vy)),
+           Math.min(info.bbox[2], Math.max(...vx)), Math.min(info.bbox[3], Math.max(...vy))];
+    if (win[0] >= win[2] || win[1] >= win[3]) return;           // fuera del ráster
+    // margen 15%
+    const mx = (win[2] - win[0]) * 0.15, my = (win[3] - win[1]) * 0.15;
+    win = [Math.max(info.bbox[0], win[0] - mx), Math.max(info.bbox[1], win[1] - my),
+           Math.min(info.bbox[2], win[2] + mx), Math.min(info.bbox[3], win[3] + my)];
+  }
+
+  // evitar relecturas idénticas
+  const firma = win.map(v => v.toFixed(1)).join(',') + '|' + Math.round(m.getZoom() * 2);
+  const kf = m === map ? '_firmaA' : '_firmaB';
+  if (capa[kf] === firma) return;
+  capa[kf] = firma;
+
+  // elegir nivel (pirámide) → objetivo ~viewport px, tope MAX_PX_LADO
+  const resXBase = (info.bbox[2] - info.bbox[0]) / info.W;
+  const winPxBase = (win[2] - win[0]) / resXBase;
+  const targetPx = Math.min(MAX_PX_LADO, Math.max(512, Math.ceil(m.getCanvas().width * 1.1)));
+  const bpp = capa.tipo === 'geotiff-dem' ? 4 : info.samples;
+  const aspecto = (win[3] - win[1]) / (win[2] - win[0]);
+  // IO real de una lectura: con tiles solo la ventana; sin tiles, filas COMPLETAS
+  const ioDe = c => {
+    const px = winPxBase / c.esc, py = px * aspecto;
+    return c.img.isTiled ? px * py * bpp : py * c.img.getWidth() * bpp;
+  };
+  let nivel = null, escala = 1;
+  const candidatos = info.niveles.map((img, i) => ({ img, i, esc: info.W / img.getWidth() }))
+    .sort((a, b) => b.esc - a.esc); // más grueso primero
+  for (const c of candidatos) {
+    const px = winPxBase / c.esc;
+    if (nivel === null && ioDe(c) <= MAX_BYTES_LECTURA) { nivel = c; escala = c.esc; }
+    if (px <= targetPx * 1.4 && ioDe(c) <= MAX_BYTES_LECTURA) { nivel = c; escala = c.esc; }
+    else if (px > targetPx * 1.4) break;                        // los siguientes son más finos aún
+  }
+  if (nivel === null) {
+    if (!capa._avisado) { capa._avisado = true; aviso(`"${capa.nombre}": el TIFF no tiene pirámides — acercate más para cargar esa zona (o exportalo como Cloud-Optimized GeoTIFF).`, 8000); }
+    if (inicial) { capa._estado = 'error'; capa._err = 'TIFF sin pirámides internas: solo carga acercándose mucho. Solución definitiva: exportar como Cloud-Optimized GeoTIFF (o gdaladdo).'; renderPanel(); }
+    return;
+  }
+
+  const img = nivel.img;
+  const rel = [(win[0] - info.bbox[0]) / (info.bbox[2] - info.bbox[0]), (info.bbox[3] - win[3]) / (info.bbox[3] - info.bbox[1]),
+               (win[2] - info.bbox[0]) / (info.bbox[2] - info.bbox[0]), (info.bbox[3] - win[1]) / (info.bbox[3] - info.bbox[1])];
+  const w = img.getWidth(), h = img.getHeight();
+  const pxWin = [Math.floor(rel[0] * w), Math.floor(rel[1] * h), Math.ceil(rel[2] * w), Math.ceil(rel[3] * h)];
+  if (pxWin[2] - pxWin[0] < 2 || pxWin[3] - pxWin[1] < 2) return;
+
+  const seqK = m === map ? '_seqA' : '_seqB';
+  const miSeq = (capa[seqK] = (capa[seqK] || 0) + 1);
+  capa._prog = 'descargando datos…'; renderPanel();
+
+  let canvas;
+  try {
+    if (capa.tipo === 'geotiff-dem') {
+      const data = await img.readRasters({ window: pxWin, samples: [0] });
+      if (capa[seqK] !== miSeq) return;
+      const resNativa = ((win[2] - win[0]) / data.width);
+      canvas = pintarHillshade(data[0], data.width, data.height, resNativa, info.nodata);
+      if (m === map) capa._demCache = { data: data[0], w: data.width, h: data.height, win };
+    } else {
+      const data = await img.readRasters({ window: pxWin, interleave: true });
+      if (capa[seqK] !== miSeq) return;
+      canvas = pintarRGB(data, data.width, data.height, info.samples, info.nodata);
+    }
+  } catch (e) {
+    capa._prog = ''; capa[kf] = null; renderPanel();   // permitir reintento al navegar
+    throw e;
+  }
+  capa._prog = '';
+  if (capa._estado === 'error') { capa._estado = ''; capa._err = ''; }  // la zona sí cargó
+  renderPanel();
+
+  const coords = esquinas4326(win, info.epsg);
+  const url = canvas.toDataURL('image/png');
+  if (m._removed) return;
+  if (m.getSource(id)) {
+    m.getSource(id).updateImage({ url, coordinates: coords });
+  } else {
+    m.addSource(id, { type: 'image', url, coordinates: coords });
+    m.addLayer({
+      id, type: 'raster', source: id,
+      layout: { visibility: capa.visible === false ? 'none' : 'visible' },
+      paint: { 'raster-opacity': capa.opacidad ?? 1, 'raster-fade-duration': 0 }
+    }, primerVectorId(m));
+  }
+}
+
+function pintarRGB(data, w, h, samples, nodata) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const im = ctx.createImageData(w, h);
+  const px = im.data;
+  const n = w * h;
+  for (let i = 0; i < n; i++) {
+    const o = i * samples;
+    let r, g, b, a = 255;
+    if (samples >= 3) { r = data[o]; g = data[o + 1]; b = data[o + 2]; if (samples >= 4) a = data[o + 3]; }
+    else { r = g = b = data[o]; }
+    if (nodata !== null && data[o] === nodata) a = 0;
+    if (samples >= 3 && r === 0 && g === 0 && b === 0) a = 0;   // borde negro típico de ortos
+    const q = i * 4; px[q] = r; px[q + 1] = g; px[q + 2] = b; px[q + 3] = a;
+  }
+  ctx.putImageData(im, 0, 0);
+  return cv;
+}
+
+function pintarHillshade(z, w, h, res, nodata) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  const im = ctx.createImageData(w, h);
+  const px = im.data;
+  const az = 315 * Math.PI / 180, alt = 45 * Math.PI / 180;
+  const sinAlt = Math.sin(alt), cosAlt = Math.cos(alt);
+  const val = (x, y) => z[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = z[y * w + x];
+    const q = (y * w + x) * 4;
+    if (v === undefined || Number.isNaN(v) || (nodata !== null && v === nodata)) { px[q + 3] = 0; continue; }
+    const dzdx = ((val(x + 1, y - 1) + 2 * val(x + 1, y) + val(x + 1, y + 1)) - (val(x - 1, y - 1) + 2 * val(x - 1, y) + val(x - 1, y + 1))) / (8 * res);
+    const dzdy = ((val(x - 1, y + 1) + 2 * val(x, y + 1) + val(x + 1, y + 1)) - (val(x - 1, y - 1) + 2 * val(x, y - 1) + val(x + 1, y - 1))) / (8 * res);
+    const slope = Math.atan(Math.hypot(dzdx, dzdy));
+    const aspect = Math.atan2(dzdy, -dzdx);
+    let sh = sinAlt * Math.cos(slope) + cosAlt * Math.sin(slope) * Math.cos(az - aspect);
+    sh = Math.max(0, Math.min(1, sh));
+    const c = Math.round(40 + sh * 215);
+    px[q] = c; px[q + 1] = c; px[q + 2] = c; px[q + 3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+  return cv;
+}
+
+// cota del MDT del proyecto en un punto (usa la última ventana leída)
+function cotaEn(lngLat) {
+  for (const capa of CFG.capas) {
+    if (capa.tipo !== 'geotiff-dem' || !capa._demCache || capa.visible === false) continue;
+    const c = capa._demCache;
+    const epsg = capa._epsg;
+    if (!epsg) continue;
+    const p = epsg === 'EPSG:4326' ? [lngLat.lng, lngLat.lat] : proj4('EPSG:4326', epsg, [lngLat.lng, lngLat.lat]);
+    if (p[0] < c.win[0] || p[0] > c.win[2] || p[1] < c.win[1] || p[1] > c.win[3]) continue;
+    const fx = (p[0] - c.win[0]) / (c.win[2] - c.win[0]);
+    const fy = (c.win[3] - p[1]) / (c.win[3] - c.win[1]);
+    const v = c.data[Math.min(c.h - 1, Math.floor(fy * c.h)) * c.w + Math.min(c.w - 1, Math.floor(fx * c.w))];
+    if (v !== undefined && !Number.isNaN(v)) return v;
+  }
+  return null;
+}
+
+// ---------- utilidades de capas ----------
+function subcapas(capa) {
+  const id = 'c-' + capa.id;
+  return ['geojson', 'kml', 'kmz', 'dxf'].includes(capa.tipo) ? [id, id + '-fill', id + '-pt', id + '-lbl'] : [id];
+}
+function setVisibilidad(m, capa, on) {
+  for (const l of subcapas(capa)) if (m.getLayer(l)) m.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none');
+  if (on && (capa.tipo === 'geotiff' || capa.tipo === 'geotiff-dem') && !m.getSource('c-' + capa.id)) {
+    capa._estado = ''; capa._err = '';
+    instalarGeotiff(m, capa);
+  }
+}
+function setOpacidad(m, capa, v) {
+  const id = 'c-' + capa.id;
+  if (!m.getLayer(id)) return;
+  if (['xyz', 'imagen', 'geotiff', 'geotiff-dem'].includes(capa.tipo)) m.setPaintProperty(id, 'raster-opacity', v);
+  else if (capa.tipo === 'dem') m.setPaintProperty(id, 'hillshade-exaggeration', v);
+  else {
+    m.setPaintProperty(id, 'line-opacity', v);
+    if (m.getLayer(id + '-fill')) m.setPaintProperty(id + '-fill', 'fill-opacity', v * 0.13);
+  }
+}
+function mapas() { return mapB ? [map, mapB] : [map]; }
+
+// Faja POSGAR automática según longitud (F1..F7); coordenadas en POSGAR 2007
+function fajaDeLon(lon) { return Math.min(7, Math.max(1, Math.round((lon + 75) / 3))); }
+function posgarDe(lng, lat) {
+  const f = fajaDeLon(lng);
+  const [E, N] = proj4('EPSG:4326', 'EPSG:' + (5342 + f), [lng, lat]);
+  return [f, E, N];
+}
+
+// Botones de sitios (proyectos con más de una ubicación, ej. Loma Negra SJ + CA)
+function renderSitios() {
+  const cont = $('sitios');
+  cont.innerHTML = '';
+  if (!CFG.sitios || CFG.sitios.length < 2) return;
+  CFG.sitios.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'sitioBtn' + (i === 0 ? ' activo' : '');
+    b.textContent = s.nombre;
+    b.onclick = () => {
+      for (const x of cont.children) x.classList.remove('activo');
+      b.classList.add('activo');
+      for (const m of mapas()) m.flyTo({ center: s.centro, zoom: s.zoom || 14, duration: 1800 });
+    };
+    cont.appendChild(b);
+  });
+}
+
+// ---------- Panel ----------
+function tipoLabel(c) {
+  return {
+    'geotiff': 'ortomosaico · GeoTIFF', 'geotiff-dem': 'modelo de terreno · GeoTIFF',
+    'xyz': 'ráster teselado', 'dem': 'modelo de terreno', 'imagen': 'imagen',
+    'geojson': c.origen ? 'CAD · ' + c.origen : 'vector', 'kml': 'KML', 'kmz': 'KMZ', 'dxf': 'plano CAD · DXF'
+  }[c.tipo] || c.tipo;
+}
+
+function renderPanel() {
+  const body = $('capasBody');
+  body.innerHTML = '';
+  const todas = [...CFG.capas, ...capasSubidas];
+  for (let i = 0; i < todas.length; i++) {
+    const capa = todas[i];
+    const subida = i >= CFG.capas.length;
+    const div = document.createElement('div');
+    div.className = 'capa' + (capa._estado === 'cargando' ? ' cargando' : '') + (capa._estado === 'error' ? ' error' : '');
+    const fechaHtml = capa.fecha ? `<span class="fecha">${capa.fecha}</span>` : '';
+    div.innerHTML = `
+      <div class="fila1">
+        <input type="checkbox" ${capa.visible === false ? '' : 'checked'}>
+        <span class="nombre">${capa.nombre}</span>
+        ${fechaHtml}
+        ${subida ? '<button class="quitar" title="Quitar capa">✕</button>' : ''}
+      </div>
+      <div class="tipo">${tipoLabel(capa)}</div>
+      ${capa._estado === 'cargando' ? `<div class="prog">⏳ ${capa._prog || 'cargando…'}</div>` : ''}
+      ${capa._estado === 'error' ? `<div class="errtxt">⚠ ${capa._err}</div>` : ''}
+      <input type="range" min="0" max="1" step="0.05" value="${capa.opacidad ?? 1}" title="Opacidad">`;
+    const chk = div.querySelector('input[type=checkbox]');
+    chk.onchange = () => { capa.visible = chk.checked; for (const m of mapas()) setVisibilidad(m, capa, chk.checked); };
+    div.querySelector('input[type=range]').oninput = e => {
+      const v = parseFloat(e.target.value); capa.opacidad = v;
+      for (const m of mapas()) setOpacidad(m, capa, v);
+    };
+    const btnQ = div.querySelector('.quitar');
+    if (btnQ) btnQ.onclick = () => {
+      for (const m of mapas()) { for (const l of subcapas(capa)) if (m.getLayer(l)) m.removeLayer(l); if (m.getSource('c-' + capa.id)) m.removeSource('c-' + capa.id); }
+      capasSubidas = capasSubidas.filter(c => c !== capa);
+      renderPanel();
+    };
+    body.appendChild(div);
+  }
+}
+
+// ---------- Inicio ----------
+function iniciar() {
+  $('landing').style.display = 'none';
+  document.title = `${CFG.proyecto || CFG.cliente} — Visor DAMS`;
+  $('proyectoInfo').innerHTML = `<b>${CFG.cliente}</b>&ensp;·&ensp;${CFG.proyecto || ''}`;
+
+  const inicio = CFG.centro || (CFG.sitios && CFG.sitios[0] && CFG.sitios[0].centro) || [-68.52, -31.53];
+  const zoomInicio = CFG.zoom || (CFG.sitios && CFG.sitios[0] && CFG.sitios[0].zoom) || 12;
+  map = new maplibregl.Map({
+    container: 'map', style: estiloBase(),
+    center: inicio, zoom: zoomInicio,
+    pitch: 0, maxPitch: 75, attributionControl: { compact: true }
+  });
+  renderSitios();
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: 'metric' }), 'bottom-right');
+  map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+
+  map.on('load', () => {
+    CFG.capas.forEach((c, i) => agregarCapa(map, c, i));
+    if (CFG.bounds) map.fitBounds(CFG.bounds, { padding: 40, duration: 0 });
+    renderPanel();
+    descubrirDrive();       // agrega lo que encuentre en las carpetas Drive
+  });
+
+  map.on('mousemove', e => {
+    const { lng, lat } = e.lngLat;
+    $('coordsWgs').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    try {
+      const [f, E, N] = posgarDe(lng, lat);
+      $('coordsPosgar').textContent = `POSGAR F${f}  E ${E.toFixed(1)}  N ${N.toFixed(1)}`;
+    } catch (_) {}
+  });
+
+  map.on('click', e => {
+    if (modoCmp) return;
+    const { lng, lat } = e.lngLat;
+    let html = `<b>WGS84:</b> ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    try {
+      const [f, E, N] = posgarDe(lng, lat);
+      html += `<br><b>POSGAR F${f}:</b> E ${E.toFixed(2)} · N ${N.toFixed(2)}`;
+    } catch (_) {}
+    const cota = cotaEn(e.lngLat);
+    if (cota !== null) html += `<br><b>Cota MDT:</b> ${cota.toFixed(1)} m`;
+    else if (terrenoOn && map.queryTerrainElevation) {
+      const z = map.queryTerrainElevation(e.lngLat);
+      if (z != null) html += `<br><b>Cota (DEM global):</b> ${z.toFixed(0)} m`;
+    }
+    new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat).setHTML(html).addTo(map);
+  });
+
+  configurarBotones();
+  configurarUpload();
+}
+
+// ---------- Botones ----------
+function configurarBotones() {
+  $('btnBase').onclick = () => {
+    const i = ORDEN_BASES.indexOf(base);
+    base = ORDEN_BASES[(i + 1) % ORDEN_BASES.length];
+    for (const m of mapas()) for (const k of ORDEN_BASES)
+      m.setLayoutProperty('base-' + k, 'visibility', k === base ? 'visible' : 'none');
+    $('btnBase').textContent = 'Base: ' + BASES[base].nombre;
+  };
+
+  $('btn3d').onclick = () => {
+    terrenoOn = !terrenoOn;
+    if (terrenoOn) {
+      map.setTerrain({ source: 'dem-global', exaggeration: CFG.exageracion3d ?? 1.25 });
+      map.easeTo({ pitch: 60, duration: 800 });
+    } else {
+      map.setTerrain(null);
+      map.easeTo({ pitch: 0, duration: 600 });
+    }
+    $('btn3d').classList.toggle('activo', terrenoOn);
+  };
+
+  $('btnCmp').onclick = () => modoCmp ? salirCmp() : entrarCmp();
+}
+
+// ---------- Comparación (swipe) ----------
+function capasComparables() {
+  return CFG.capas.filter(c => ['xyz', 'dem', 'imagen', 'geotiff', 'geotiff-dem'].includes(c.tipo) && c._estado !== 'error');
+}
+
+function entrarCmp() {
+  const comp = capasComparables();
+  if (comp.length < 1) { aviso('No hay capas ráster para comparar.'); return; }
+  modoCmp = true;
+  $('btnCmp').classList.add('activo');
+  $('mapB').style.display = 'block';
+  $('divisor').style.display = 'block';
+  $('cmpIzq').style.display = 'block';
+  $('cmpDer').style.display = 'block';
+  $('cmpConfig').style.display = 'block';
+
+  mapB = new maplibregl.Map({
+    container: 'mapB', style: estiloBase(),
+    center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch(),
+    attributionControl: false
+  });
+  mapB.on('load', () => {
+    CFG.capas.forEach((c, i) => agregarCapa(mapB, c, i));
+    poblarSelectores();
+    aplicarCmp();
+  });
+
+  map.on('move', syncA); mapB.on('move', syncB);
+
+  const div = $('divisor');
+  posicionarDivisor(0.5);
+  let arrastrando = false;
+  div.onpointerdown = e => { arrastrando = true; div.setPointerCapture(e.pointerId); };
+  div.onpointermove = e => {
+    if (!arrastrando) return;
+    const r = $('mapWrap').getBoundingClientRect();
+    posicionarDivisor(Math.min(0.97, Math.max(0.03, (e.clientX - r.left) / r.width)));
+  };
+  div.onpointerup = () => arrastrando = false;
+}
+
+function posicionarDivisor(frac) {
+  $('divisor').style.left = (frac * 100) + '%';
+  $('map').style.clipPath = `inset(0 ${(1 - frac) * 100}% 0 0)`;
+  $('mapB').style.clipPath = `inset(0 0 0 ${frac * 100}%)`;
+}
+function syncA() { if (syncLock || !mapB) return; syncLock = true; mapB.jumpTo(vista(map)); syncLock = false; }
+function syncB() { if (syncLock) return; syncLock = true; map.jumpTo(vista(mapB)); syncLock = false; }
+function vista(m) { return { center: m.getCenter(), zoom: m.getZoom(), bearing: m.getBearing(), pitch: m.getPitch() }; }
+
+function poblarSelectores() {
+  const comp = capasComparables();
+  for (const sel of [$('selIzq'), $('selDer')]) {
+    sel.innerHTML = '';
+    for (const c of comp) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = c.nombre + (c.fecha ? ` (${c.fecha})` : '');
+      sel.appendChild(o);
+    }
+    sel.onchange = aplicarCmp;
+  }
+  $('selIzq').selectedIndex = 0;
+  $('selDer').selectedIndex = Math.min(1, comp.length - 1);
+}
+
+function aplicarCmp() {
+  const izq = $('selIzq').value, der = $('selDer').value;
+  const comp = capasComparables();
+  for (const c of comp) {
+    setVisibilidad(map, c, c.id === izq);
+    if (mapB && mapB.isStyleLoaded()) setVisibilidad(mapB, c, c.id === der);
+  }
+  const cI = comp.find(c => c.id === izq), cD = comp.find(c => c.id === der);
+  $('cmpIzq').textContent = cI ? cI.nombre + (cI.fecha ? ' · ' + cI.fecha : '') : '';
+  $('cmpDer').textContent = cD ? cD.nombre + (cD.fecha ? ' · ' + cD.fecha : '') : '';
+}
+
+function salirCmp() {
+  modoCmp = false;
+  $('btnCmp').classList.remove('activo');
+  map.off('move', syncA);
+  for (const c of CFG.capas) { c._hB = false; c._firmaB = null; }
+  if (mapB) { mapB._removed = true; mapB.remove(); mapB = null; }
+  $('mapB').style.display = 'none';
+  $('divisor').style.display = 'none';
+  $('cmpIzq').style.display = 'none';
+  $('cmpDer').style.display = 'none';
+  $('cmpConfig').style.display = 'none';
+  $('map').style.clipPath = 'none';
+  for (const c of CFG.capas) setVisibilidad(map, c, c.visible !== false);
+}
+
+// ---------- Superposición de archivos del usuario ----------
+function configurarUpload() {
+  $('btnSubir').onclick = () => $('fileInput').click();
+  $('fileInput').onchange = e => { for (const f of e.target.files) procesarArchivo(f); e.target.value = ''; };
+  const wrap = $('mapWrap');
+  let contador = 0;
+  wrap.addEventListener('dragenter', e => { e.preventDefault(); if (++contador === 1) $('dropHint').style.display = 'flex'; });
+  wrap.addEventListener('dragleave', e => { e.preventDefault(); if (--contador === 0) $('dropHint').style.display = 'none'; });
+  wrap.addEventListener('dragover', e => e.preventDefault());
+  wrap.addEventListener('drop', e => {
+    e.preventDefault(); contador = 0; $('dropHint').style.display = 'none';
+    for (const f of e.dataTransfer.files) procesarArchivo(f);
+  });
+}
+
+function procesarArchivo(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const esBin = ext === 'kmz';
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      let gj = null;
+      if (ext === 'geojson' || ext === 'json') gj = JSON.parse(reader.result);
+      else if (ext === 'kml' || ext === 'gpx') {
+        const dom = new DOMParser().parseFromString(reader.result, 'text/xml');
+        gj = ext === 'kml' ? toGeoJSON.kml(dom) : toGeoJSON.gpx(dom);
+      } else if (ext === 'kmz') {
+        const zip = await JSZip.loadAsync(reader.result);
+        const kml = Object.keys(zip.files).find(n => n.toLowerCase().endsWith('.kml'));
+        if (!kml) throw new Error('KMZ sin KML interno');
+        gj = toGeoJSON.kml(new DOMParser().parseFromString(await zip.files[kml].async('text'), 'text/xml'));
+      } else if (ext === 'dxf') gj = dxfAGeojson(reader.result);
+      else if (ext === 'dwg') { aviso('Los DWG no se pueden leer en el navegador. Exportalo como DXF desde AutoCAD/Civil 3D.'); return; }
+      else { aviso('Formato no soportado: .' + ext); return; }
+      if (!gj || !gj.features || !gj.features.length) { aviso('El archivo no contiene geometrías legibles.'); return; }
+      agregarCapaSubida(file.name, gj, ext.toUpperCase());
+    } catch (err) {
+      console.error(err);
+      aviso('No se pudo leer ' + file.name + ' — ' + err.message);
+    }
+  };
+  if (esBin) reader.readAsArrayBuffer(file); else reader.readAsText(file);
+}
+
+// DXF → GeoJSON (coordenadas en el CRS del proyecto salvo que ya sean lat/lon)
+function dxfAGeojson(texto) {
+  if (typeof DxfParser === 'undefined') throw new Error('librería DXF no disponible');
+  const dxf = new DxfParser().parseSync(texto);
+  // autodetectar faja: en Gauss-Krüger argentino el Este empieza con el nº de faja
+  let epsg = 'EPSG:' + (CFG.crs || 5344);
+  for (const e of (dxf.entities || [])) {
+    const v = (e.vertices && e.vertices[0]) || e.position || e.center || e.startPoint;
+    if (v && v.x > 1e6 && v.x < 8e6) {
+      const f = Math.floor(v.x / 1e6);
+      if (f >= 1 && f <= 7) epsg = 'EPSG:' + (5342 + f);
+      break;
+    }
+  }
+  const esGeo = v => Math.abs(v.x) <= 180 && Math.abs(v.y) <= 90;
+  const tr = v => esGeo(v) ? [v.x, v.y] : proj4(epsg, 'EPSG:4326', [v.x, v.y]);
+  const feats = [];
+  const arco = (cx, cy, r, a0, a1) => {
+    const pts = [];
+    if (a1 < a0) a1 += 360;
+    const n = Math.max(8, Math.ceil((a1 - a0) / 6));
+    for (let i = 0; i <= n; i++) {
+      const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180;
+      pts.push(tr({ x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) }));
+    }
+    return pts;
+  };
+  for (const e of (dxf.entities || [])) {
+    const props = { capa_dxf: e.layer || '0' };
+    try {
+      if (e.type === 'LINE' && e.vertices?.length >= 2)
+        feats.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: e.vertices.map(tr) } });
+      else if ((e.type === 'LWPOLYLINE' || e.type === 'POLYLINE') && e.vertices?.length >= 2) {
+        let coords = e.vertices.map(tr);
+        if (e.shape || e.closed) coords = [...coords, coords[0]];
+        feats.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: coords } });
+      } else if (e.type === 'POINT' && e.position)
+        feats.push({ type: 'Feature', properties: props, geometry: { type: 'Point', coordinates: tr(e.position) } });
+      else if (e.type === 'CIRCLE' && e.center)
+        feats.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: arco(e.center.x, e.center.y, e.radius, 0, 360) } });
+      else if (e.type === 'ARC' && e.center)
+        feats.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: arco(e.center.x, e.center.y, e.radius, e.startAngle * 180 / Math.PI, e.endAngle * 180 / Math.PI) } });
+      else if ((e.type === 'TEXT' || e.type === 'MTEXT') && (e.startPoint || e.position)) {
+        const p = e.startPoint || e.position;
+        feats.push({ type: 'Feature', properties: { ...props, nombre: e.text || '' }, geometry: { type: 'Point', coordinates: tr(p) } });
+      }
+    } catch (_) { /* entidad fuera de rango: se omite */ }
+  }
+  return { type: 'FeatureCollection', features: feats };
+}
+
+function agregarCapaSubida(nombre, gj, origen) {
+  const capa = {
+    id: 'up' + Date.now() + Math.floor(Math.random() * 1e4),
+    nombre, tipo: 'geojson', origen, data: gj, visible: true, opacidad: 1
+  };
+  capasSubidas.push(capa);
+  for (const m of mapas()) instalarVector(m, capa, CFG.capas.length + capasSubidas.length);
+  const b = bboxDe(gj);
+  if (b) map.fitBounds(b, { padding: 60, duration: 800, maxZoom: 17 });
+  aviso(`Capa "${nombre}" superpuesta (${gj.features.length} elementos).`);
+}
+
+function bboxDe(gj) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const rec = c => {
+    if (typeof c[0] === 'number') {
+      if (isFinite(c[0]) && isFinite(c[1])) {
+        minX = Math.min(minX, c[0]); maxX = Math.max(maxX, c[0]);
+        minY = Math.min(minY, c[1]); maxY = Math.max(maxY, c[1]);
+      }
+    } else c.forEach(rec);
+  };
+  for (const f of gj.features) if (f.geometry) rec(f.geometry.coordinates);
+  return isFinite(minX) ? [[minX, minY], [maxX, maxY]] : null;
+}
+</script>
+</body>
+</html>

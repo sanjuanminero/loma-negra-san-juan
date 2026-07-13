@@ -1,0 +1,4 @@
+{
+  "_comentario": "Configuración global del visor. driveApiKey: clave de API de Google restringida a Google Drive API + referrers del visor (localhost:8125 y GitHub Pages).",
+  "driveApiKey": "PEGAR_ACA_LA_CLAVE_DE_API"
+}

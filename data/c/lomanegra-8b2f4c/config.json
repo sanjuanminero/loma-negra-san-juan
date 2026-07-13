@@ -1,0 +1,18 @@
+{
+  "cliente": "LOMA NEGRA",
+  "proyecto": "Canteras Piedras Blancas (San Juan) y Doña Amalia (Catamarca)",
+  "crs": 5344,
+  "sitios": [
+    { "nombre": "Piedras Blancas · SJ", "centro": [-68.68554, -31.5438], "zoom": 15 },
+    { "nombre": "Doña Amalia · CA", "centro": [-65.24934, -28.47016], "zoom": 14 }
+  ],
+  "carpetasDrive": [
+    { "id": "18Bcqf7Y8_IW3rzqEPmTrRkC-N1TjiUHt", "fecha": "2023-02-21", "grupo": "piedras-blancas" },
+    { "id": "1zTbO1JC1fcsnZB7g28XMeRD2yDC9ASDm", "fecha": "2021-12-28", "grupo": "piedras-blancas" },
+    { "id": "1cnhRiHU7k1FZ2bAH2DG9sC2P3rmsCwKX", "fecha": "2020-10-06", "grupo": "piedras-blancas" },
+    { "id": "1DM6Sd9QdMAKyvh8lFCn8R92E-i5-P5bU", "fecha": "2019-05-23", "grupo": "piedras-blancas" },
+    { "id": "1Fm-oopGbuqe2BMAVvQwfWwfdiu3vhYD7", "fecha": "2018-11-27", "grupo": "piedras-blancas" },
+    { "id": "185d8OF7tGclaBi3gV0MxIy6JozSwvy1r", "fecha": "2025-12-16", "grupo": "dona-amalia" }
+  ],
+  "capas": []
+}

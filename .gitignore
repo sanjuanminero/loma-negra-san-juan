@@ -1,0 +1,17 @@
+# temporales del pipeline
+_hillshade_*.tif
+_curvas_*.gpkg
+*.pyc
+__pycache__/
+
+# entregables crudos: nunca al repo (quedan en Drive)
+*.tiff
+*.tif
+!data/c/demo/*.tif
+*.ecw
+*.dwg
+*.las
+*.laz
+
+# la clave de API real NO va al repo: crearla a mano como data/visor.json
+data/visor.json

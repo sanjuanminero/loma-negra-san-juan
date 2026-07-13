@@ -1,0 +1,55 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "AREA_TRABAJO", "nombre": "Área de relevamiento" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-69.695, -30.225],
+          [-69.615, -30.225],
+          [-69.605, -30.265],
+          [-69.635, -30.290],
+          [-69.690, -30.280],
+          [-69.695, -30.225]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "CAMINOS", "nombre": "Camino de acceso proyectado" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-69.712, -30.302],
+          [-69.690, -30.288],
+          [-69.668, -30.276],
+          [-69.652, -30.262],
+          [-69.648, -30.248],
+          [-69.640, -30.238]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "PUNTOS_CONTROL", "nombre": "PC-01" },
+      "geometry": { "type": "Point", "coordinates": [-69.688, -30.232] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "PUNTOS_CONTROL", "nombre": "PC-02" },
+      "geometry": { "type": "Point", "coordinates": [-69.622, -30.240] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "PUNTOS_CONTROL", "nombre": "PC-03" },
+      "geometry": { "type": "Point", "coordinates": [-69.645, -30.278] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "capa_dxf": "PLATAFORMAS", "nombre": "Plataforma DDH-A" },
+      "geometry": { "type": "Point", "coordinates": [-69.662, -30.252] }
+    }
+  ]
+}

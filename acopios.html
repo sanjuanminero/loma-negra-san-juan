@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Trazabilidad de Stock — DAMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/proj4@2.11.0/dist/proj4.js"></script>
+<script src="https://unpkg.com/geotiff@3.0.5/dist-browser/geotiff.js"></script>
+<style>
+  :root{
+    --dams-yellow:#F3C323; --dams-yellow-dark:#C99B0F; --dams-yellow-soft:#FFF4D1;
+    --dams-black:#000000; --dams-white:#FFFFFF;
+    --dams-ink:#1A1A1A; --dams-muted:#555555; --dams-line:#D9D9D9; --dams-bg-soft:#F7F7F5;
+    --dams-navy:#1F3A5F; --dams-success:#2E7D5C; --rojo:#B3452F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:'Montserrat','Helvetica',sans-serif;background:var(--dams-bg-soft);color:var(--dams-ink);overflow:hidden}
+
+  header{
+    position:fixed;top:0;left:0;right:0;height:54px;z-index:30;
+    background:var(--dams-black);border-bottom:3px solid var(--dams-yellow);
+    display:flex;align-items:center;gap:14px;padding:0 18px;color:var(--dams-white);
+  }
+  .logo{font-weight:800;font-size:20px;letter-spacing:.18em;white-space:nowrap}
+  .logo .sub{display:block;font-size:8.5px;font-weight:600;letter-spacing:.30em;color:var(--dams-yellow);margin-top:-2px}
+  #clienteInfo{font-size:12px;border-left:1px solid #3a3a3a;padding-left:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #clienteInfo b{color:var(--dams-yellow)}
+  header .spacer{flex:1}
+  .hbtn{background:transparent;border:1px solid #4a4a4a;color:var(--dams-white);font-family:inherit;font-size:11px;font-weight:600;padding:7px 13px;border-radius:3px;cursor:pointer;white-space:nowrap}
+  .hbtn:hover{border-color:var(--dams-yellow);color:var(--dams-yellow)}
+  .hbtn.activo{background:var(--dams-yellow);border-color:var(--dams-yellow);color:var(--dams-black)}
+
+  #layout{position:fixed;top:54px;left:0;right:0;bottom:0;display:flex}
+  #mapWrap{flex:1;position:relative}
+  #map{position:absolute;inset:0}
+
+  /* ── Panel derecho ── */
+  #panel{width:392px;background:var(--dams-white);border-left:1px solid var(--dams-line);display:flex;flex-direction:column;overflow-y:auto}
+  #panel section{padding:14px 16px;border-bottom:1px solid var(--dams-bg-soft)}
+  h2{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--dams-navy);margin-bottom:10px;text-transform:uppercase}
+
+  /* fecha */
+  #fechaBox{display:flex;align-items:center;gap:10px}
+  #fechaBox button{width:34px;height:34px;border:1px solid var(--dams-line);background:var(--dams-white);border-radius:4px;cursor:pointer;font-size:15px;color:var(--dams-navy);font-weight:700}
+  #fechaBox button:hover{border-color:var(--dams-yellow-dark)}
+  #fechaLabel{flex:1;text-align:center}
+  #fechaLabel b{display:block;font-size:17px;color:var(--dams-ink)}
+  #fechaLabel span{font-size:10px;color:var(--dams-muted);letter-spacing:.05em}
+  #fechaSlider{width:100%;margin-top:10px;accent-color:var(--dams-yellow-dark);cursor:pointer}
+
+  /* KPIs */
+  #kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .kpi{background:var(--dams-bg-soft);border:1px solid var(--dams-line);border-top:3px solid var(--dams-yellow);border-radius:4px;padding:9px 10px}
+  .kpi .v{font-size:19px;font-weight:800;color:var(--dams-ink);line-height:1.1}
+  .kpi .v small{font-size:11px;font-weight:600;color:var(--dams-muted)}
+  .kpi .l{font-size:9px;font-weight:600;letter-spacing:.07em;color:var(--dams-muted);text-transform:uppercase;margin-top:2px}
+  .kpi .delta{font-size:11px;font-weight:700}
+  .up{color:var(--dams-success)} .down{color:var(--rojo)}
+
+  /* gráfico evolución */
+  #chartTotal{width:100%;display:block}
+  .leyenda{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .leyenda span{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;color:var(--dams-muted)}
+  .leyenda i{width:10px;height:10px;border-radius:2px;display:inline-block}
+
+  /* materiales */
+  .matCard{display:flex;align-items:center;gap:8px;background:var(--dams-bg-soft);border:1px solid var(--dams-line);border-radius:4px;padding:7px 9px;margin-bottom:6px;cursor:pointer}
+  .matCard:hover{background:var(--dams-yellow-soft);border-color:var(--dams-yellow-dark)}
+  .matCard .info{flex:1;min-width:0}
+  .matCard .nom{font-size:10.5px;font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .matCard .sub{font-size:9px;color:var(--dams-muted)}
+  .matCard .vol{text-align:right;font-variant-numeric:tabular-nums}
+  .matCard .vol b{font-size:13px}
+  .matCard .vol span{display:block;font-size:9.5px;font-weight:700}
+  .matCard svg{flex-shrink:0}
+
+  /* tabla acopios */
+  table{width:100%;border-collapse:collapse;font-size:11.5px}
+  th{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--dams-muted);text-align:left;padding:4px 6px;border-bottom:2px solid var(--dams-line)}
+  td{padding:5px 6px;border-bottom:1px solid var(--dams-bg-soft)}
+  tr.fila:hover{background:var(--dams-yellow-soft);cursor:pointer}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .matdot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:1px}
+  td .mat{font-size:9.5px;color:var(--dams-muted);display:block;margin-top:1px}
+  tr.total td{font-weight:800;border-top:2px solid var(--dams-line)}
+
+  /* detalle acopio */
+  #detalle{position:absolute;inset:auto 12px 12px 12px;max-width:560px;margin:auto;z-index:25;background:var(--dams-white);border-radius:6px;border-top:3px solid var(--dams-yellow);box-shadow:0 4px 24px rgba(0,0,0,.3);padding:14px 16px;display:none}
+  #detalle h3{font-size:14px;color:var(--dams-ink)}
+  #detalle .mat{font-size:11px;color:var(--dams-muted);margin-bottom:8px}
+  #detalle .cerrar{position:absolute;top:8px;right:10px;background:none;border:none;font-size:16px;cursor:pointer;color:var(--dams-muted)}
+
+  footer{position:fixed;left:0;right:0;bottom:0;height:0}
+  #marcaAgua{position:absolute;left:12px;bottom:10px;z-index:20;background:rgba(255,255,255,.92);border-left:3px solid var(--dams-yellow);padding:6px 12px;border-radius:3px;font-size:10px;color:var(--dams-muted)}
+  #marcaAgua b{color:var(--dams-ink)}
+
+  #avisoEdit{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:26;display:none;background:var(--dams-black);color:var(--dams-yellow);font-size:11.5px;font-weight:600;padding:8px 16px;border-radius:4px}
+  .acopioLbl{background:var(--dams-black);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;border:1px solid rgba(255,255,255,.3)}
+
+  #cargando{position:fixed;inset:0;z-index:100;background:var(--dams-white);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+  #cargando .m{font-size:30px;font-weight:800;letter-spacing:.2em}
+  #cargando .m i{font-style:normal;color:var(--dams-yellow)}
+  #cargando p{font-size:12px;color:var(--dams-muted)}
+
+  @media (max-width:900px){
+    #layout{flex-direction:column}
+    #panel{width:100%;height:52%;border-left:none;border-top:2px solid var(--dams-yellow)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">DAMS<span class="sub">TRAZABILIDAD DE STOCK</span></div>
+  <div id="clienteInfo"></div>
+  <div class="spacer"></div>
+  <button class="hbtn" id="btnFondo" style="display:none">Informe</button>
+  <button class="hbtn" id="btnEditar" style="display:none">✎ Posiciones</button>
+</header>
+
+<div id="layout">
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div id="marcaAgua"><b>DAMS SRL</b> · Auditoría mensual de stock · Mejores datos. Mejores resultados.</div>
+    <div id="avisoEdit">Modo edición: arrastrá los acopios a su posición real y tocá "Copiar posiciones"</div>
+    <div id="detalle">
+      <button class="cerrar" onclick="cerrarDetalle()">✕</button>
+      <h3 id="detTitulo"></h3>
+      <div class="mat" id="detMat"></div>
+      <svg id="detChart" width="520" height="150"></svg>
+    </div>
+  </div>
+
+  <div id="panel">
+    <section>
+      <h2>Relevamiento</h2>
+      <div id="fechaBox">
+        <button id="btnPrev">‹</button>
+        <div id="fechaLabel"><b>—</b><span>—</span></div>
+        <button id="btnNext">›</button>
+      </div>
+      <input type="range" id="fechaSlider" min="0" max="0" value="0">
+    </section>
+    <section>
+      <h2>Materiales — stock del relevamiento</h2>
+      <div id="materiales"></div>
+    </section>
+    <section>
+      <h2>Indicadores</h2>
+      <div id="kpis"></div>
+    </section>
+    <section>
+      <h2>Evolución del stock por material</h2>
+      <svg id="chartTotal" height="140"></svg>
+      <div class="leyenda" id="leyenda"></div>
+    </section>
+    <section>
+      <h2>Acopios del relevamiento</h2>
+      <table>
+        <thead><tr><th>Acopio</th><th style="text-align:right">Vol. (m³)</th><th style="text-align:right">Δ mes</th></tr></thead>
+        <tbody id="tbodyAcopios"></tbody>
+      </table>
+    </section>
+  </div>
+</div>
+
+<div id="cargando">
+  <div class="m">DAMS<i>·</i>STOCK</div>
+  <p id="cargandoTxt">Cargando datos de auditoría…</p>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+   DAMS · Trazabilidad de Stock — producto exclusivo por cliente.
+   Lee data/c/<token>/stock.json:
+   {
+     cliente, planta, crs, centro:[lon,lat], zoom,
+     posiciones: { "V01":[lon,lat], ... },      // editable con ?editar=1
+     capas: [ {id,nombre,tipo:'xyz'|'geotiff',url|driveId,fecha} ],  // ortos opcionales
+     series: [ {fecha:'YYYY-MM-DD', acopios:[[id,cod,material,vol,err],...], total_m3} ]
+   }
+   ================================================================ */
+
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const token = (params.get('c') || '').trim().toLowerCase();
+const MODO_EDIT = params.get('editar') === '1';
+
+let D = null;          // stock.json
+let GLOBAL = {};       // visor.json (clave drive)
+let idx = 0;           // índice de fecha activo
+let map, markers = {}; // maplibre markers por acopio
+let fmt = new Intl.NumberFormat('es-AR');
+
+// paleta por familia de material
+const FAMILIAS = [
+  [/CLINKER|\bCK\b/i, '#4A4A45', 'CLINKER'],
+  [/YESO/i, '#C99B0F', 'YESO'],
+  [/PUZOLANA/i, '#B3452F', 'PUZOLANA'],
+  [/PIEDRA|CALIZA|TRITURAD/i, '#1F3A5F', 'PIEDRA/CALIZA'],
+  [/FLUORITA|ALFA/i, '#7B5EA7', 'FLUORITA'],
+  [/ESCORIA/i, '#2E7D5C', 'ESCORIA'],
+  [/LUTITA|CAOLIN|CUARZO|ARENA|LODO|PEF/i, '#8A6F4B', 'OTROS'],
+];
+const OTROS = ['#3E7CA8', '#2E7D5C', '#8A6F4B', '#607090'];
+const matColorCache = {};
+function colorMat(mat) {
+  if (matColorCache[mat]) return matColorCache[mat];
+  for (const [re, c] of FAMILIAS) if (re.test(mat)) return matColorCache[mat] = c;
+  return matColorCache[mat] = OTROS[Object.keys(matColorCache).length % OTROS.length];
+}
+function familiaMat(mat) {
+  for (const [re, c, nombre] of FAMILIAS) if (re.test(mat)) return nombre;
+  return mat.split(' ')[0];
+}
+
+// ---------- materiales (la unidad de análisis es el mineral, no el acopio) ----------
+// códigos SAP con variantes de tipeo en los informes → canónico
+function normCod(c) {
+  c = String(c || '').trim();
+  const eq = { '500007': '50007', '500045': '50045', '10000031': '10000030', '10000025': '10000026' };
+  return eq[c] || c;
+}
+// nombres con variantes (PULVURENTO/PULVERULENTO, etc.) → canónico
+function normNombre(n) {
+  return String(n).toUpperCase().replace(/\s+/g, ' ').trim()
+    .replace('PULVURENTO', 'PULVERULENTO')
+    .replace('YESO TRITURADO SULFATO 80%', 'YESO TRITURADO 0-100 80%');
+}
+function matKey(a) { return normCod(a[1]) || normNombre(a[2]); }
+
+// series por material: key → {nombre, color, porFecha: Map(fecha→vol), err: Map}
+let MATS = null;
+function armarMateriales() {
+  MATS = {};
+  for (const s of D.series) {
+    for (const a of s.acopios) {
+      const k = matKey(a);
+      if (!MATS[k]) MATS[k] = { key: k, nombre: normNombre(a[2]), color: colorMat(a[2]), porFecha: {}, errPorFecha: {} };
+      MATS[k].porFecha[s.fecha] = (MATS[k].porFecha[s.fecha] || 0) + a[3];
+      MATS[k].errPorFecha[s.fecha] = (MATS[k].errPorFecha[s.fecha] || 0) + (a[4] || 0);
+    }
+  }
+  for (const m of Object.values(MATS)) {
+    const vals = Object.values(m.porFecha);
+    m.media = vals.reduce((a, b) => a + b, 0) / vals.length;
+    m.min = Math.min(...vals); m.max = Math.max(...vals);
+    m.nFechas = vals.length;
+  }
+}
+
+// ---------- carga ----------
+if (!token) { $('cargandoTxt').textContent = 'Falta el código de proyecto (?c=...)'; }
+else {
+  Promise.all([
+    fetch('data/visor.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    fetch(`data/c/${encodeURIComponent(token)}/stock.json`, { cache: 'no-store' }).then(r => { if (!r.ok) throw 0; return r.json(); })
+  ]).then(([g, d]) => { GLOBAL = g; D = d; iniciar(); })
+    .catch(() => { $('cargandoTxt').textContent = 'Código no válido o proyecto no disponible.'; });
+}
+
+function iniciar() {
+  D.series.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  idx = D.series.length - 1;
+  armarMateriales();
+  $('clienteInfo').innerHTML = `<b>${D.cliente}</b>&ensp;·&ensp;${D.planta || ''}`;
+  document.title = `Stock ${D.cliente} — DAMS`;
+  if (MODO_EDIT) { $('btnEditar').style.display = 'inline-block'; $('avisoEdit').style.display = 'block'; }
+
+  map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      sources: {
+        sat: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri, Maxar', maxzoom: 19 }
+      },
+      layers: [{ id: 'sat', type: 'raster', source: 'sat' }]
+    },
+    center: D.centro || [-68.685, -31.544],
+    zoom: D.zoom || 16,
+    attributionControl: { compact: true }
+  });
+  map.addControl(new maplibregl.NavigationControl(), 'top-right');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+
+  map.on('load', () => {
+    $('cargando').style.display = 'none';
+    montarFondos();
+    montarPoligonos();
+    montarUI();
+    render();
+  });
+
+  $('btnEditar').onclick = copiarPosiciones;
+}
+
+// ---------- fondo: la lámina del informe georreferenciada sobre el satélite ----------
+let fondoOn = true;
+function montarFondos() {
+  if (!D.fondos || !D.fondos.length) return;
+  D.fondos.forEach((f, i) => {
+    map.addSource('fondo' + i, { type: 'image', url: `data/c/${encodeURIComponent(token)}/${f.url}`, coordinates: f.coordenadas });
+    map.addLayer({ id: 'fondo' + i, type: 'raster', source: 'fondo' + i, paint: { 'raster-opacity': f.opacidad ?? 0.95, 'raster-fade-duration': 0 } });
+  });
+  const b = $('btnFondo');
+  b.style.display = 'inline-block';
+  b.classList.add('activo');
+  b.onclick = () => {
+    fondoOn = !fondoOn;
+    b.classList.toggle('activo', fondoOn);
+    D.fondos.forEach((f, i) => map.setLayoutProperty('fondo' + i, 'visibility', fondoOn ? 'visible' : 'none'));
+  };
+  if (MODO_EDIT) montarCalibracion();
+}
+
+// Modo edición: arrastrá las 2 esquinas (NO y SE) hasta calzar la lámina con el
+// satélite; la lámina y TODOS los acopios se recalculan en vivo.
+function montarCalibracion() {
+  const f = D.fondos[0];
+  map.setPaintProperty('fondo0', 'raster-opacity', 0.55);
+  const mkEsq = (pos, titulo) => {
+    const el = document.createElement('div');
+    el.style.cssText = 'width:18px;height:18px;border-radius:3px;background:#F3C323;border:2px solid #000;cursor:move;box-shadow:0 1px 6px rgba(0,0,0,.6)';
+    el.title = titulo;
+    return new maplibregl.Marker({ element: el, draggable: true }).setLngLat(pos).addTo(map);
+  };
+  const esqNO = mkEsq(f.coordenadas[0], 'Esquina NO de la lámina');
+  const esqSE = mkEsq(f.coordenadas[2], 'Esquina SE de la lámina');
+  const aplicar = () => {
+    const a = esqNO.getLngLat(), b2 = esqSE.getLngLat();
+    const lonW = Math.min(a.lng, b2.lng), lonE = Math.max(a.lng, b2.lng);
+    const latN = Math.max(a.lat, b2.lat), latS = Math.min(a.lat, b2.lat);
+    f.coordenadas = [[lonW, latN], [lonE, latN], [lonE, latS], [lonW, latS]];
+    map.getSource('fondo0').setCoordinates(f.coordenadas);
+    if (D.fraccionesFigura) {
+      for (const k in D.fraccionesFigura) {
+        const [fx, fy] = D.fraccionesFigura[k];
+        D.posiciones[k] = [+(lonW + fx * (lonE - lonW)).toFixed(6), +(latN + fy * (latS - latN)).toFixed(6)];
+        if (markers[k]) markers[k].setLngLat(D.posiciones[k]);
+      }
+    }
+  };
+  esqNO.on('drag', aplicar); esqSE.on('drag', aplicar);
+  $('avisoEdit').textContent = 'Modo edición: arrastrá las esquinas amarillas para calzar la lámina del informe; los acopios siguen solos. Después tocá "✎ Posiciones".';
+}
+
+// posiciones: config o auto-grilla alrededor del centro
+function posicionDe(aid, i) {
+  if (D.posiciones && D.posiciones[aid]) return D.posiciones[aid];
+  const c = D.centro || [-68.685, -31.544];
+  const col = i % 5, fila = Math.floor(i / 5);
+  return [c[0] + (col - 2) * 0.00075, c[1] - 0.0009 - fila * 0.00055];
+}
+
+// ---------- UI estática ----------
+function montarUI() {
+  $('fechaSlider').min = 0;
+  $('fechaSlider').max = D.series.length - 1;
+  $('fechaSlider').value = idx;
+  $('fechaSlider').oninput = e => { idx = +e.target.value; render(); };
+  $('btnPrev').onclick = () => { if (idx > 0) { idx--; render(); } };
+  $('btnNext').onclick = () => { if (idx < D.series.length - 1) { idx++; render(); } };
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') $('btnPrev').click();
+    if (e.key === 'ArrowRight') $('btnNext').click();
+  });
+}
+
+// ---------- render por fecha ----------
+function fechaLarga(f) {
+  const [y, m, d] = f.split('-');
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${+d} de ${meses[+m - 1]} de ${y}`;
+}
+
+function render() {
+  const s = D.series[idx];
+  const prev = D.series[idx - 1];
+  $('fechaSlider').value = idx;
+  $('fechaLabel').innerHTML = `<b>${fechaLarga(s.fecha)}</b><span>relevamiento ${idx + 1} de ${D.series.length}</span>`;
+
+  // KPIs
+  const total = s.total_m3 ?? s.acopios.reduce((a, x) => a + x[3], 0);
+  const totalPrev = prev ? (prev.total_m3 ?? prev.acopios.reduce((a, x) => a + x[3], 0)) : null;
+  const delta = totalPrev !== null ? total - totalPrev : null;
+  const errTot = s.acopios.reduce((a, x) => a + (x[4] || 0), 0);
+  const nMat = new Set(s.acopios.map(x => x[2])).size;
+  $('kpis').innerHTML = `
+    <div class="kpi"><div class="v">${fmt.format(Math.round(total))}<small> m³</small></div><div class="l">Stock total</div></div>
+    <div class="kpi"><div class="v ${delta === null ? '' : delta >= 0 ? 'up' : 'down'}">${delta === null ? '—' : (delta >= 0 ? '+' : '−') + fmt.format(Math.abs(Math.round(delta)))}<small> m³</small></div><div class="l">Δ vs relevamiento anterior</div></div>
+    <div class="kpi"><div class="v">${s.acopios.length}<small> / ${nMat} mat.</small></div><div class="l">Acopios medidos</div></div>
+    <div class="kpi"><div class="v">±${fmt.format(Math.round(errTot))}<small> m³</small></div><div class="l">Error volumétrico</div></div>`;
+
+  // tabla
+  const tb = $('tbodyAcopios');
+  tb.innerHTML = '';
+  const prevMap = {};
+  if (prev) for (const a of prev.acopios) prevMap[a[0]] = a[3];
+  for (const a of s.acopios) {
+    const [aid, cod, mat, vol] = a;
+    const dv = prevMap[aid] !== undefined ? vol - prevMap[aid] : null;
+    const tr = document.createElement('tr');
+    tr.className = 'fila';
+    tr.innerHTML = `
+      <td><span class="matdot" style="background:${colorMat(mat)}"></span><b>${aid}</b><span class="mat">${mat}</span></td>
+      <td class="num">${fmt.format(Math.round(vol))}</td>
+      <td class="num ${dv === null ? '' : dv >= 0 ? 'up' : 'down'}">${dv === null ? '—' : (dv >= 0 ? '+' : '−') + fmt.format(Math.abs(Math.round(dv)))}</td>`;
+    tr.onclick = () => abrirDetalleMaterial(matKey(a));
+    tb.appendChild(tr);
+  }
+  const trT = document.createElement('tr');
+  trT.className = 'total';
+  trT.innerHTML = `<td>TOTAL</td><td class="num">${fmt.format(Math.round(total))}</td><td class="num ${delta === null ? '' : delta >= 0 ? 'up' : 'down'}">${delta === null ? '—' : (delta >= 0 ? '+' : '−') + fmt.format(Math.abs(Math.round(delta)))}</td>`;
+  tb.appendChild(trT);
+
+  renderMateriales(s, prevMap);
+  dibujarChartTotal();
+  renderMarkers(s);
+}
+
+// ---------- cards de materiales ----------
+function renderMateriales(s, prevMap) {
+  const cont = $('materiales');
+  cont.innerHTML = '';
+  const prev = D.series[idx - 1];
+  const hoy = {};
+  for (const a of s.acopios) { const k = matKey(a); hoy[k] = (hoy[k] || 0) + a[3]; }
+  const ayer = {};
+  if (prev) for (const a of prev.acopios) { const k = matKey(a); ayer[k] = (ayer[k] || 0) + a[3]; }
+  const orden = Object.keys(hoy).sort((a, b) => hoy[b] - hoy[a]);
+  for (const k of orden) {
+    const m = MATS[k];
+    const dv = ayer[k] !== undefined ? hoy[k] - ayer[k] : null;
+    const card = document.createElement('div');
+    card.className = 'matCard';
+    card.innerHTML = `
+      <span class="matdot" style="background:${m.color}"></span>
+      <div class="info">
+        <div class="nom">${m.nombre}</div>
+        <div class="sub">media hist. ${fmt.format(Math.round(m.media))} m³ · ${m.nFechas} relev.</div>
+      </div>
+      ${sparkline(m, 92, 26)}
+      <div class="vol"><b>${fmt.format(Math.round(hoy[k]))}</b>
+        <span class="${dv === null ? '' : dv >= 0 ? 'up' : 'down'}">${dv === null ? '&nbsp;' : (dv >= 0 ? '+' : '−') + fmt.format(Math.abs(Math.round(dv)))}</span></div>`;
+    card.onclick = () => abrirDetalleMaterial(k);
+    cont.appendChild(card);
+  }
+}
+
+function sparkline(m, W, H) {
+  const fechas = D.series.map(s => s.fecha);
+  const pts = fechas.map((f, i) => [i, m.porFecha[f]]).filter(p => p[1] !== undefined);
+  if (pts.length < 2) return `<svg width="${W}" height="${H}"></svg>`;
+  const maxV = Math.max(m.max, 1);
+  const x = i => (i / (fechas.length - 1)) * (W - 2) + 1;
+  const y = v => H - 2 - (v / maxV) * (H - 5);
+  let d = '';
+  let prevI = null;
+  for (const [i, v] of pts) {
+    d += (prevI !== null && i - prevI === 1 ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1) + ' ';
+    prevI = i;
+  }
+  const yMed = y(m.media);
+  const cur = pts.findLast ? pts.findLast(p => p[0] <= idx) : pts.filter(p => p[0] <= idx).pop();
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <line x1="1" x2="${W - 1}" y1="${yMed.toFixed(1)}" y2="${yMed.toFixed(1)}" stroke="#C99B0F" stroke-width="1" stroke-dasharray="3 2"/>
+    <path d="${d}" fill="none" stroke="${m.color}" stroke-width="1.4"/>
+    ${cur ? `<circle cx="${x(cur[0]).toFixed(1)}" cy="${y(cur[1]).toFixed(1)}" r="2.6" fill="#F3C323" stroke="#000" stroke-width="0.8"/>` : ''}
+  </svg>`;
+}
+
+// ---------- historial del material (la vista que pide auditoría) ----------
+function abrirDetalleMaterial(k) {
+  const m = MATS[k];
+  if (!m) return;
+  const s = D.series[idx];
+  const actual = m.porFecha[s.fecha];
+  const acHoy = s.acopios.filter(a => matKey(a) === k);
+  $('detTitulo').innerHTML = `<span class="matdot" style="background:${m.color}"></span>${m.nombre}`;
+  const vsMedia = actual !== undefined ? ((actual - m.media) / m.media * 100) : null;
+  $('detMat').innerHTML =
+    `Hoy: <b>${actual !== undefined ? fmt.format(Math.round(actual)) + ' m³' : 'sin stock medido'}</b> en ${acHoy.length} acopio${acHoy.length === 1 ? '' : 's'} (${acHoy.map(a => a[0]).join(', ') || '—'})` +
+    ` &nbsp;·&nbsp; media histórica <b>${fmt.format(Math.round(m.media))} m³</b>` +
+    (vsMedia !== null ? ` &nbsp;·&nbsp; <span class="${vsMedia >= 0 ? 'up' : 'down'}">${vsMedia >= 0 ? '+' : ''}${vsMedia.toFixed(0)}% vs media</span>` : '') +
+    ` &nbsp;·&nbsp; rango ${fmt.format(Math.round(m.min))}–${fmt.format(Math.round(m.max))} m³ en ${m.nFechas} relevamientos`;
+
+  const svg = $('detChart');
+  const W = 520, H = 150, pL = 46, pB = 20, pT = 8;
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const n = D.series.length;
+  const maxV = Math.max(m.max, 1);
+  const x = i => pL + i * (W - pL - 8) / Math.max(1, n - 1);
+  const y = v => H - pB - v / maxV * (H - pB - pT);
+  for (const frac of [0, 0.5, 1]) {
+    const v = maxV * frac;
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ln.setAttribute('x1', pL); ln.setAttribute('x2', W - 8);
+    ln.setAttribute('y1', y(v)); ln.setAttribute('y2', y(v));
+    ln.setAttribute('stroke', '#E5E2DB');
+    svg.appendChild(ln);
+    const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tx.setAttribute('x', pL - 4); tx.setAttribute('y', y(v) + 3);
+    tx.setAttribute('font-size', '8.5'); tx.setAttribute('fill', '#777'); tx.setAttribute('text-anchor', 'end');
+    tx.textContent = fmt.format(Math.round(v));
+    svg.appendChild(tx);
+  }
+  // media histórica = referencia de equilibrio
+  const lm = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  lm.setAttribute('x1', pL); lm.setAttribute('x2', W - 8);
+  lm.setAttribute('y1', y(m.media)); lm.setAttribute('y2', y(m.media));
+  lm.setAttribute('stroke', '#C99B0F'); lm.setAttribute('stroke-width', '1.4'); lm.setAttribute('stroke-dasharray', '5 3');
+  svg.appendChild(lm);
+  const lt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  lt.setAttribute('x', W - 10); lt.setAttribute('y', y(m.media) - 3);
+  lt.setAttribute('font-size', '8'); lt.setAttribute('fill', '#C99B0F'); lt.setAttribute('text-anchor', 'end');
+  lt.textContent = 'media histórica';
+  svg.appendChild(lt);
+  // línea con huecos donde el material no se midió
+  let path = '', started = false;
+  D.series.forEach((sr, i) => {
+    const v = m.porFecha[sr.fecha];
+    if (v === undefined) { started = false; return; }
+    path += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1) + ' ';
+    started = true;
+  });
+  const pl2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  pl2.setAttribute('d', path);
+  pl2.setAttribute('fill', 'none'); pl2.setAttribute('stroke', m.color); pl2.setAttribute('stroke-width', '2');
+  svg.appendChild(pl2);
+  D.series.forEach((sr, i) => {
+    const v = m.porFecha[sr.fecha];
+    if (v === undefined) return;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', x(i)); c.setAttribute('cy', y(v));
+    c.setAttribute('r', i === idx ? 5 : 2.6);
+    c.setAttribute('fill', i === idx ? '#F3C323' : m.color);
+    c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '1');
+    c.style.cursor = 'pointer';
+    const tt = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    tt.textContent = `${sr.fecha}: ${fmt.format(Math.round(v))} m³`;
+    c.appendChild(tt);
+    c.addEventListener('click', () => { idx = i; render(); abrirDetalleMaterial(k); });
+    svg.appendChild(c);
+  });
+  [[0, 'start'], [n - 1, 'end']].forEach(([i, anchor]) => {
+    const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tx.setAttribute('x', x(i)); tx.setAttribute('y', H - 6);
+    tx.setAttribute('font-size', '8.5'); tx.setAttribute('fill', '#777'); tx.setAttribute('text-anchor', anchor);
+    tx.textContent = D.series[i].fecha.slice(0, 7);
+    svg.appendChild(tx);
+  });
+  $('detalle').style.display = 'block';
+}
+
+// ---------- superficies reales (shapefile Pix4D del relevamiento) ----------
+function montarPoligonos() {
+  if (!D.poligonos || !D.poligonos.length) return;
+  const pg = D.poligonos[0];
+  const fc = {
+    type: 'FeatureCollection',
+    features: pg.anillos.map((anillo, i) => ({
+      type: 'Feature',
+      properties: { n: 'S' + String(i + 1).padStart(2, '0') },
+      geometry: { type: 'Polygon', coordinates: [anillo.concat([anillo[0]])] }
+    }))
+  };
+  map.addSource('sup', { type: 'geojson', data: fc });
+  map.addLayer({ id: 'sup-fill', type: 'fill', source: 'sup', paint: { 'fill-color': '#F3C323', 'fill-opacity': 0.14 } });
+  map.addLayer({ id: 'sup-line', type: 'line', source: 'sup', paint: { 'line-color': '#F3C323', 'line-width': 2 } });
+  map.on('click', 'sup-fill', e => {
+    const n = e.features[0].properties.n;
+    new maplibregl.Popup().setLngLat(e.lngLat)
+      .setHTML(`<b>Superficie ${n}</b><br>Relevada el ${pg.fecha} (${pg.origen || 'shapefile'}).<br><i>Subí el .dbf del export para vincularla a su acopio y material.</i>`)
+      .addTo(map);
+  });
+}
+
+// ---------- markers ----------
+function renderMarkers(s) {
+  // con superficies reales cargadas, los círculos aproximados solo van en modo edición
+  if (D.poligonos && D.poligonos.length && !MODO_EDIT) {
+    for (const aid of Object.keys(markers)) { markers[aid].remove(); delete markers[aid]; }
+    return;
+  }
+  const activos = new Set(s.acopios.map(a => a[0]));
+  // quitar los que no están
+  for (const aid of Object.keys(markers)) {
+    if (!activos.has(aid)) { markers[aid].remove(); delete markers[aid]; }
+  }
+  const maxVol = Math.max(...s.acopios.map(a => a[3]), 1);
+  s.acopios.forEach((a, i) => {
+    const [aid, cod, mat, vol] = a;
+    const px = Math.max(16, Math.sqrt(vol / maxVol) * 58);
+    let mk = markers[aid];
+    if (!mk) {
+      const el = document.createElement('div');
+      el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer';
+      el.innerHTML = `<div class="circ" style="border-radius:50%;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5)"></div><span class="acopioLbl"></span>`;
+      el.onclick = e => { e.stopPropagation(); const ac = D.series[idx].acopios.find(z => z[0] === aid); if (ac) abrirDetalleMaterial(matKey(ac)); };
+      mk = new maplibregl.Marker({ element: el, draggable: MODO_EDIT, anchor: 'center' })
+        .setLngLat(posicionDe(aid, i)).addTo(map);
+      if (MODO_EDIT) mk.on('dragend', () => {
+        D.posiciones = D.posiciones || {};
+        const p = mk.getLngLat();
+        D.posiciones[aid] = [+p.lng.toFixed(7), +p.lat.toFixed(7)];
+      });
+      markers[aid] = mk;
+    }
+    const el = mk.getElement();
+    const c = el.querySelector('.circ');
+    c.style.width = c.style.height = px + 'px';
+    c.style.background = colorMat(mat) + 'D9';
+    el.querySelector('.acopioLbl').textContent = `${aid} · ${fmt.format(Math.round(vol))} m³`;
+    el.title = mat;
+    if (D.posiciones && D.posiciones[aid]) mk.setLngLat(D.posiciones[aid]);
+  });
+}
+
+function copiarPosiciones() {
+  const out = { posiciones: D.posiciones || {}, fondos: (D.fondos || []).map(f => ({ fecha: f.fecha, url: f.url, coordenadas: f.coordenadas })) };
+  const json = JSON.stringify(out, null, 1);
+  navigator.clipboard.writeText(json).then(() => {
+    alert('Copiado al portapapeles: posiciones + esquinas de la lámina.\nPegámelo en el chat y lo fijo en stock.json.');
+  });
+}
+
+// ---------- gráfico evolución total (barras apiladas por familia) ----------
+function dibujarChartTotal() {
+  const svg = $('chartTotal');
+  const W = svg.clientWidth || 356, H = 140, padB = 16, padL = 2;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+  const familias = [];
+  const porFecha = D.series.map(s => {
+    const acc = {};
+    for (const a of s.acopios) {
+      const fam = familiaMat(a[2]);
+      if (!familias.includes(fam)) familias.push(fam);
+      acc[fam] = (acc[fam] || 0) + a[3];
+    }
+    return acc;
+  });
+  const maxT = Math.max(...porFecha.map(f => Object.values(f).reduce((a, b) => a + b, 0)), 1);
+  const bw = Math.max(3, Math.min(18, (W - padL * 2) / D.series.length - 2));
+  const step = (W - padL * 2) / D.series.length;
+  const famColor = {};
+  for (const s of D.series) for (const a of s.acopios) famColor[familiaMat(a[2])] = colorMat(a[2]);
+
+  porFecha.forEach((f, i) => {
+    let y = H - padB;
+    const x = padL + i * step + (step - bw) / 2;
+    for (const fam of familias) {
+      const v = f[fam] || 0;
+      if (!v) continue;
+      const h = v / maxT * (H - padB - 8);
+      y -= h;
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('x', x); r.setAttribute('y', y);
+      r.setAttribute('width', bw); r.setAttribute('height', Math.max(0.5, h));
+      r.setAttribute('fill', famColor[fam] || '#999');
+      r.setAttribute('opacity', i === idx ? '1' : '0.45');
+      r.style.cursor = 'pointer';
+      r.addEventListener('click', () => { idx = i; render(); });
+      svg.appendChild(r);
+    }
+    // marcador de fecha activa
+    if (i === idx) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      t.setAttribute('x', x); t.setAttribute('y', H - padB + 3);
+      t.setAttribute('width', bw); t.setAttribute('height', 4);
+      t.setAttribute('fill', 'var(--dams-yellow)');
+      svg.appendChild(t);
+    }
+    if (i === 0 || i === D.series.length - 1) {
+      const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tx.setAttribute('x', x + bw / 2); tx.setAttribute('y', H - 2);
+      tx.setAttribute('font-size', '8'); tx.setAttribute('fill', '#555');
+      tx.setAttribute('text-anchor', i === 0 ? 'start' : 'end');
+      tx.textContent = D.series[i].fecha.slice(0, 7);
+      svg.appendChild(tx);
+    }
+  });
+
+  $('leyenda').innerHTML = familias.map(f => `<span><i style="background:${famColor[f] || '#999'}"></i>${f}</span>`).join('');
+}
+
+// ---------- detalle por acopio ----------
+function abrirDetalle(aid) {
+  const serie = D.series.map(s => {
+    const a = s.acopios.find(x => x[0] === aid);
+    return { fecha: s.fecha, vol: a ? a[3] : null, mat: a ? a[2] : null };
+  });
+  const actual = serie[idx].mat ? serie[idx] : serie.filter(p => p.mat).pop();
+  $('detTitulo').textContent = `Acopio ${aid}`;
+  $('detMat').innerHTML = `<span class="matdot" style="background:${colorMat(actual.mat || '')}"></span>${actual.mat || ''} — histórico de ${serie.filter(p => p.vol !== null).length} relevamientos`;
+
+  const svg = $('detChart');
+  const W = 520, H = 150, pL = 46, pB = 20, pT = 8;
+  svg.innerHTML = '';
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = serie.map(p => p.vol).filter(v => v !== null);
+  const maxV = Math.max(...vals, 1);
+  const n = serie.length;
+  const x = i => pL + i * (W - pL - 8) / Math.max(1, n - 1);
+  const y = v => H - pB - v / maxV * (H - pB - pT);
+
+  // ejes / grilla
+  for (const frac of [0, 0.5, 1]) {
+    const v = maxV * frac;
+    const ln = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    ln.setAttribute('x1', pL); ln.setAttribute('x2', W - 8);
+    ln.setAttribute('y1', y(v)); ln.setAttribute('y2', y(v));
+    ln.setAttribute('stroke', '#E5E2DB'); ln.setAttribute('stroke-width', '1');
+    svg.appendChild(ln);
+    const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tx.setAttribute('x', pL - 4); tx.setAttribute('y', y(v) + 3);
+    tx.setAttribute('font-size', '8.5'); tx.setAttribute('fill', '#777'); tx.setAttribute('text-anchor', 'end');
+    tx.textContent = fmt.format(Math.round(v));
+    svg.appendChild(tx);
+  }
+  // línea (con huecos donde no se midió)
+  let path = '', started = false;
+  serie.forEach((p, i) => {
+    if (p.vol === null) { started = false; return; }
+    path += (started ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.vol).toFixed(1) + ' ';
+    started = true;
+  });
+  const pl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  pl.setAttribute('d', path);
+  pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', 'var(--dams-navy)'); pl.setAttribute('stroke-width', '2');
+  svg.appendChild(pl);
+  // puntos
+  serie.forEach((p, i) => {
+    if (p.vol === null) return;
+    const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    c.setAttribute('cx', x(i)); c.setAttribute('cy', y(p.vol));
+    c.setAttribute('r', i === idx ? 5 : 2.6);
+    c.setAttribute('fill', i === idx ? 'var(--dams-yellow)' : colorMat(p.mat));
+    c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width', '1');
+    c.style.cursor = 'pointer';
+    const tt = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    tt.textContent = `${p.fecha}: ${fmt.format(Math.round(p.vol))} m³ (${p.mat})`;
+    c.appendChild(tt);
+    c.addEventListener('click', () => { idx = i; render(); });
+    svg.appendChild(c);
+  });
+  // etiquetas de extremos
+  [[0, 'start'], [n - 1, 'end']].forEach(([i, anchor]) => {
+    const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    tx.setAttribute('x', x(i)); tx.setAttribute('y', H - 6);
+    tx.setAttribute('font-size', '8.5'); tx.setAttribute('fill', '#777'); tx.setAttribute('text-anchor', anchor);
+    tx.textContent = serie[i].fecha.slice(0, 7);
+    svg.appendChild(tx);
+  });
+
+  $('detalle').style.display = 'block';
+}
+function cerrarDetalle() { $('detalle').style.display = 'none'; }
+map; // (silencia linter)
+</script>
+</body>
+</html>

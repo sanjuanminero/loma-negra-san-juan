@@ -1,0 +1,37 @@
+{
+  "cliente": "PROYECTO DEMO",
+  "proyecto": "Área de demostración — Iglesia, San Juan",
+  "crs": 5344,
+  "centro": [-69.653, -30.262],
+  "zoom": 13,
+  "capas": [
+    {
+      "id": "orto-demo",
+      "nombre": "Ortomosaico (GeoTIFF demo)",
+      "tipo": "geotiff",
+      "fecha": "2026-04",
+      "url": "orto_demo.tif",
+      "visible": true,
+      "opacidad": 1
+    },
+    {
+      "id": "mdt-demo",
+      "nombre": "MDT (GeoTIFF demo)",
+      "tipo": "geotiff-dem",
+      "fecha": "2026-04",
+      "url": "mdt_demo.tif",
+      "visible": true,
+      "opacidad": 0.6
+    },
+    {
+      "id": "cad-demo",
+      "nombre": "Planta topográfica (CAD)",
+      "tipo": "geojson",
+      "origen": "DWG → GeoJSON",
+      "url": "cad_demo.geojson",
+      "color": "#1F3A5F",
+      "visible": true,
+      "opacidad": 1
+    }
+  ]
+}
